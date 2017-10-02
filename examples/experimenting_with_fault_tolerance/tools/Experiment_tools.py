@@ -429,7 +429,6 @@ def post_treatment_list(results):
 
 # Function that creates all the qasm codes and misc information about the circuits to be run
 def create_all_circuits(cp):
-
     # The circuits for the experiment with input state and output distribution
     circuits = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
                 [['HHS', 'Z1', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
