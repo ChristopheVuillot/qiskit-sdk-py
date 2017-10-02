@@ -15,155 +15,154 @@ from scipy.stats import t, norm
 # Functions that helps deciding what is the "best" pair of qubits
 #################################################################
 
-def convert_rate(rT, rG):
-    if rT['unit']=='ns':
-        mT = 10**(-9)
-    elif rT['unit']=='µs':
-        mT = 10**(-6)
+def convert_rate(time_t, time_gate):
+    if time_t['unit'] == 'ns':
+        multiplier_t = 10**(-9)
+    elif time_t['unit'] == 'µs':
+        multiplier_t = 10**(-6)
     else:
-        mT = 1
-    if rG['unit']=='ns':
-        mG = 10**(-9)
-    elif rG['unit']=='µs':
-        mG = 10**(-6)
+        multiplier_t = 1
+    if time_gate['unit'] == 'ns':
+        multiplier_gate = 10**(-9)
+    elif time_gate['unit'] == 'µs':
+        multiplier_gate = 10**(-6)
     else:
-        mG = 1
-    return 1-np.exp(-rG['value']*mG/(rT['value']*mT))
-        
+        multiplier_gate = 1
+    return 1-np.exp(-time_gate['value']*multiplier_gate/(time_t['value']*multiplier_t))
 
-def rank_qubit_pairs(qp,backend):
-    config = qp.get_backend_configuration(backend,list_format=True)
-    calib = qp.get_backend_calibration(backend)
-    param = qp.get_backend_parameters(backend)
-    n = config['n_qubits']
-    pairs_numbers = dict([(tuple(c),[]) for c in config['coupling_map']])
-    for p,s in pairs_numbers.items():
-        s.append(calib['qubits'][p[0]]['gateError']['value'])
-        s.append(calib['qubits'][p[0]]['readoutError']['value'])
-        s.append(calib['qubits'][p[1]]['gateError']['value'])
-        s.append(calib['qubits'][p[1]]['readoutError']['value'])
-        for r in calib['multi_qubit_gates']:
-            if r['qubits']==list(p):
-                s.append(r['gateError']['value'])
-        s.append(convert_rate(param['qubits'][p[0]]['T1'],param['qubits'][p[0]]['gateTime']))
-        s.append(convert_rate(param['qubits'][p[0]]['T2'],param['qubits'][p[0]]['gateTime']))
-        s.append(convert_rate(param['qubits'][p[1]]['T1'],param['qubits'][p[1]]['gateTime']))
-        s.append(convert_rate(param['qubits'][p[1]]['T2'],param['qubits'][p[1]]['gateTime']))
-    for p,s in pairs_numbers.items():
-        pairs_numbers[p] = sorted(s,reverse=True)
-    return (sorted(pairs_numbers,key=pairs_numbers.__getitem__),pairs_numbers)
+
+def rank_qubit_pairs(quantump, backend):
+    config = quantump.get_backend_configuration(backend, list_format=True)
+    calib = quantump.get_backend_calibration(backend)
+    param = quantump.get_backend_parameters(backend)
+    pairs_numbers = dict([(tuple(c), []) for c in config['coupling_map']])
+    for pair, numbers in pairs_numbers.items():
+        numbers.append(calib['qubits'][pair[0]]['gateError']['value'])
+        numbers.append(calib['qubits'][pair[0]]['readoutError']['value'])
+        numbers.append(calib['qubits'][pair[1]]['gateError']['value'])
+        numbers.append(calib['qubits'][pair[1]]['readoutError']['value'])
+        for multiq_calib in calib['multi_qubit_gates']:
+            if multiq_calib['qubits'] == list(pair):
+                numbers.append(multiq_calib['gateError']['value'])
+        numbers.append(convert_rate(param['qubits'][pair[0]]['T1'], param['qubits'][pair[0]]['gateTime']))
+        numbers.append(convert_rate(param['qubits'][pair[0]]['T2'], param['qubits'][pair[0]]['gateTime']))
+        numbers.append(convert_rate(param['qubits'][pair[1]]['T1'], param['qubits'][pair[1]]['gateTime']))
+        numbers.append(convert_rate(param['qubits'][pair[1]]['T2'], param['qubits'][pair[1]]['gateTime']))
+    for pair, numbers in pairs_numbers.items():
+        pairs_numbers[pair] = sorted(numbers, reverse=True)
+    return (sorted(pairs_numbers, key=pairs_numbers.__getitem__), pairs_numbers)
 
 # Functions that create all the circuits inside a given QuantumProgram module
 #############################################################################
 
 # Misc aux circuits
 ###################
-def swap_circuit(pair,qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuitswap = qp.create_circuit("SWAP"+str(pair),qrs,crs)
-    qcircuitswap.cx(qrs[qri][pair[0]],qrs[qri][pair[1]])
+def swap_circuit(pair, quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuitswap = quantump.create_circuit("SWAP"+str(pair), qrs, crs)
+    qcircuitswap.cx(qrs[qri][pair[0]], qrs[qri][pair[1]])
     qcircuitswap.h(qrs[qri][pair[0]])
     qcircuitswap.h(qrs[qri][pair[1]])
-    qcircuitswap.cx(qrs[qri][pair[0]],qrs[qri][pair[1]])
+    qcircuitswap.cx(qrs[qri][pair[0]], qrs[qri][pair[1]])
     qcircuitswap.h(qrs[qri][pair[0]])
     qcircuitswap.h(qrs[qri][pair[1]])
-    qcircuitswap.cx(qrs[qri][pair[0]],qrs[qri][pair[1]])
+    qcircuitswap.cx(qrs[qri][pair[0]], qrs[qri][pair[1]])
     return qcircuitswap
 
-def measure_all(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuitmeasure = qp.create_circuit("Measure all",qrs,crs)
-    qcircuitmeasure.measure(qrs[qri][0],crs[cri][0])
-    qcircuitmeasure.measure(qrs[qri][1],crs[cri][1])
-    qcircuitmeasure.measure(qrs[qri][2],crs[cri][2])
-    qcircuitmeasure.measure(qrs[qri][3],crs[cri][3])
-    qcircuitmeasure.measure(qrs[qri][4],crs[cri][4])
+def measure_all(quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuitmeasure = quantump.create_circuit("Measure all", qrs, crs)
+    qcircuitmeasure.measure(qrs[qri][0], crs[cri][0])
+    qcircuitmeasure.measure(qrs[qri][1], crs[cri][1])
+    qcircuitmeasure.measure(qrs[qri][2], crs[cri][2])
+    qcircuitmeasure.measure(qrs[qri][3], crs[cri][3])
+    qcircuitmeasure.measure(qrs[qri][4], crs[cri][4])
     return qcircuitmeasure
 
 # The encoded preparations
 ##########################
-def encoded_00_prep_FTv1(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_FTv1 = qp.create_circuit("e|00>FTv1",qrs,crs)
-    qc_FTv1.h(qrs[qri][2])
-    qc_FTv1.cx(qrs[qri][2],qrs[qri][0])
-    qc_FTv1.cx(qrs[qri][2],qrs[qri][1])
-    qc_FTv1.h(qrs[qri][2])
-    qc_FTv1.h(qrs[qri][3])
-    qc_FTv1.cx(qrs[qri][3],qrs[qri][2])
-    qc_FTv1.h(qrs[qri][2])
-    qc_FTv1.h(qrs[qri][3])
-    qc_FTv1.cx(qrs[qri][2],qrs[qri][4])
-    qc_FTv1.cx(qrs[qri][2],qrs[qri][0])
-    #qc_FTv1.measure(qrs[qri][0],crs[cri][0])
-    return qc_FTv1
+def encoded_00_prep_ftv1(quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_ftv1 = quantump.create_circuit("e|00>ftv1", qrs, crs)
+    qc_ftv1.h(qrs[qri][2])
+    qc_ftv1.cx(qrs[qri][2], qrs[qri][0])
+    qc_ftv1.cx(qrs[qri][2], qrs[qri][1])
+    qc_ftv1.h(qrs[qri][2])
+    qc_ftv1.h(qrs[qri][3])
+    qc_ftv1.cx(qrs[qri][3], qrs[qri][2])
+    qc_ftv1.h(qrs[qri][2])
+    qc_ftv1.h(qrs[qri][3])
+    qc_ftv1.cx(qrs[qri][2], qrs[qri][4])
+    qc_ftv1.cx(qrs[qri][2], qrs[qri][0])
+    #qc_ftv1.measure(qrs[qri][0],crs[cri][0])
+    return qc_ftv1
 
-def encoded_00_prep_NFTv1(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_NFTv1 = qp.create_circuit("e|00>NFTv1",qrs,crs)
-    qc_NFTv1.h(qrs[qri][3])
-    qc_NFTv1.cx(qrs[qri][3],qrs[qri][4])
-    qc_NFTv1.cx(qrs[qri][3],qrs[qri][2])
-    qc_NFTv1.cx(qrs[qri][2],qrs[qri][1])
-    return qc_NFTv1
+def encoded_00_prep_nftv1(quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_nftv1 = quantump.create_circuit("e|00>nftv1", qrs, crs)
+    qc_nftv1.h(qrs[qri][3])
+    qc_nftv1.cx(qrs[qri][3], qrs[qri][4])
+    qc_nftv1.cx(qrs[qri][3], qrs[qri][2])
+    qc_nftv1.cx(qrs[qri][2], qrs[qri][1])
+    return qc_nftv1
 
-def encoded_00_prep_FTv2(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_FTv2 = qp.create_circuit("e|00>FTv2",qrs,crs)
-    qc_FTv2.h(qrs[qri][3])
-    qc_FTv2.cx(qrs[qri][3],qrs[qri][2])
-    qc_FTv2.h(qrs[qri][2])
-    qc_FTv2.h(qrs[qri][3])
-    qc_FTv2.cx(qrs[qri][2],qrs[qri][1])
-    qc_FTv2.cx(qrs[qri][3],qrs[qri][4])
-    qc_FTv2.h(qrs[qri][4])
-    qc_FTv2.extend(swap_circuit([2,4],qp))
-    qc_FTv2.cx(qrs[qri][2],qrs[qri][0])
-    qc_FTv2.cx(qrs[qri][1],qrs[qri][0])
-    qc_FTv2.h(qrs[qri][4])
-    #qc_FTv2.measure(qrs[qri][0],crs[cri][0])
-    return qc_FTv2
+def encoded_00_prep_ftv2(quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_ftv2 = quantump.create_circuit("e|00>ftv2", qrs, crs)
+    qc_ftv2.h(qrs[qri][3])
+    qc_ftv2.cx(qrs[qri][3], qrs[qri][2])
+    qc_ftv2.h(qrs[qri][2])
+    qc_ftv2.h(qrs[qri][3])
+    qc_ftv2.cx(qrs[qri][2], qrs[qri][1])
+    qc_ftv2.cx(qrs[qri][3], qrs[qri][4])
+    qc_ftv2.h(qrs[qri][4])
+    qc_ftv2.extend(swap_circuit([2, 4], quantump))
+    qc_ftv2.cx(qrs[qri][2], qrs[qri][0])
+    qc_ftv2.cx(qrs[qri][1], qrs[qri][0])
+    qc_ftv2.h(qrs[qri][4])
+    #qc_ftv2.measure(qrs[qri][0],crs[cri][0])
+    return qc_ftv2
     
-def encoded_00_prep_NFTv2(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_NFTv2 = qp.create_circuit("e|00>NFTv2",qrs,crs)
-    qc_NFTv2.h(qrs[qri][2])
-    qc_NFTv2.h(qrs[qri][3])
-    qc_NFTv2.cx(qrs[qri][3],qrs[qri][4])
-    qc_NFTv2.h(qrs[qri][4])
-    qc_NFTv2.cx(qrs[qri][2],qrs[qri][4])
-    qc_NFTv2.h(qrs[qri][4])
-    qc_NFTv2.extend(swap_circuit([2,1],qp))
-    qc_NFTv2.cx(qrs[qri][3],qrs[qri][2])
-    qc_NFTv2.cx(qrs[qri][2],qrs[qri][0])
-    qc_NFTv2.h(qrs[qri][0])
-    qc_NFTv2.cx(qrs[qri][1],qrs[qri][0])
-    qc_NFTv2.h(qrs[qri][0])
-    qc_NFTv2.h(qrs[qri][1])
-    #qc_NFTv2.measure(qrs[qri][0],crs[cri][0])
-    return qc_NFTv2
+def encoded_00_prep_nftv2(quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_nftv2 = quantump.create_circuit("e|00>nftv2", qrs, crs)
+    qc_nftv2.h(qrs[qri][2])
+    qc_nftv2.h(qrs[qri][3])
+    qc_nftv2.cx(qrs[qri][3], qrs[qri][4])
+    qc_nftv2.h(qrs[qri][4])
+    qc_nftv2.cx(qrs[qri][2], qrs[qri][4])
+    qc_nftv2.h(qrs[qri][4])
+    qc_nftv2.extend(swap_circuit([2, 1], quantump))
+    qc_nftv2.cx(qrs[qri][3], qrs[qri][2])
+    qc_nftv2.cx(qrs[qri][2], qrs[qri][0])
+    qc_nftv2.h(qrs[qri][0])
+    qc_nftv2.cx(qrs[qri][1], qrs[qri][0])
+    qc_nftv2.h(qrs[qri][0])
+    qc_nftv2.h(qrs[qri][1])
+    #qc_nftv2.measure(qrs[qri][0],crs[cri][0])
+    return qc_nftv2
 
-def encoded_0p_prep(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_0p = qp.create_circuit("e|0+>",qrs,crs)
+def encoded_0p_prep(quantump, qri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_0p = quantump.create_circuit("e|0+>", qrs, crs)
     qc_0p.h(qrs[qri][1])
     qc_0p.h(qrs[qri][3])
-    qc_0p.cx(qrs[qri][3],qrs[qri][2])
-    qc_0p.extend(swap_circuit([2,1],qp))
+    qc_0p.cx(qrs[qri][3], qrs[qri][2])
+    qc_0p.extend(swap_circuit([2,1],quantump))
     qc_0p.cx(qrs[qri][2],qrs[qri][4])
     return qc_0p
     
-def encoded_2cat_prep(qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qc_2cat = qp.create_circuit("e|00>+|11>",qrs,crs)
+def encoded_2cat_prep(quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qc_2cat = quantump.create_circuit("e|00>+|11>", qrs, crs)
     qc_2cat.h(qrs[qri][2])
     qc_2cat.h(qrs[qri][3])
     qc_2cat.cx(qrs[qri][2],qrs[qri][1])
@@ -173,75 +172,75 @@ def encoded_2cat_prep(qp, qri=0, cri=0):
     
 # The bare preparations
 #######################
-def bare_00_prep(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_00 = qp.create_circuit("b|00>"+str(pair),qrs,crs)
+def bare_00_prep(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_00 = quantump.create_circuit("b|00>"+str(pair), qrs, crs)
     return qcircuit_bare_00
 
-def bare_0p_prep(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_0p = qp.create_circuit("b|0+>"+str(pair),qrs,crs)
+def bare_0p_prep(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_0p = quantump.create_circuit("b|0+>"+str(pair), qrs, crs)
     qcircuit_bare_0p.h(qrs[qri][pair[1]])
     return qcircuit_bare_0p
 
-def bare_2cat_prep(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_2cat = qp.create_circuit("b|00>+|11>"+str(pair),qrs,crs)
+def bare_2cat_prep(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_2cat = quantump.create_circuit("b|00>+|11>"+str(pair), qrs, crs)
     qcircuit_bare_2cat.h(qrs[qri][pair[0]])
     qcircuit_bare_2cat.cx(qrs[qri][pair[0]],qrs[qri][pair[1]])
     return qcircuit_bare_2cat
 
 # The encoded gates
 ###################
-def encoded_X1_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_X1 = qp.create_circuit("eX1",qrs,crs)
+def encoded_X1_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_X1 = quantump.create_circuit("eX1", qrs, crs)
     qcircuit_encoded_X1.x(qrs[qri][mapping[0]])
     qcircuit_encoded_X1.x(qrs[qri][mapping[1]])
     return qcircuit_encoded_X1
 
-def encoded_X2_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_X2 = qp.create_circuit("eX2",qrs,crs)
+def encoded_X2_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_X2 = quantump.create_circuit("eX2", qrs, crs)
     qcircuit_encoded_X2.x(qrs[qri][mapping[0]])
     qcircuit_encoded_X2.x(qrs[qri][mapping[2]])
     return qcircuit_encoded_X2
 
-def encoded_Z1_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_Z1 = qp.create_circuit("eZ1",qrs,crs)
+def encoded_Z1_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_Z1 = quantump.create_circuit("eZ1", qrs, crs)
     qcircuit_encoded_Z1.z(qrs[qri][mapping[1]])
     qcircuit_encoded_Z1.z(qrs[qri][mapping[3]])
     return qcircuit_encoded_Z1
 
-def encoded_Z2_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_Z2 = qp.create_circuit("eZ2",qrs,crs)
+def encoded_Z2_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_Z2 = quantump.create_circuit("eZ2", qrs, crs)
     qcircuit_encoded_Z2.z(qrs[qri][mapping[2]])
     qcircuit_encoded_Z2.z(qrs[qri][mapping[3]])
     return qcircuit_encoded_Z2
 
-def encoded_CZ_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_CZ = qp.create_circuit("eCZ",qrs,crs)
+def encoded_CZ_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_CZ = quantump.create_circuit("eCZ", qrs, crs)
     qcircuit_encoded_CZ.s(qrs[qri][mapping[0]])
     qcircuit_encoded_CZ.s(qrs[qri][mapping[1]])
     qcircuit_encoded_CZ.s(qrs[qri][mapping[2]])
     qcircuit_encoded_CZ.s(qrs[qri][mapping[3]])
     return qcircuit_encoded_CZ
 
-def encoded_HHS_circuit(mapping, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_encoded_HHS = qp.create_circuit("eHHS",qrs,crs)
+def encoded_HHS_circuit(mapping, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_encoded_HHS = quantump.create_circuit("eHHS", qrs, crs)
     qcircuit_encoded_HHS.h(qrs[qri][mapping[0]])
     qcircuit_encoded_HHS.h(qrs[qri][mapping[1]])
     qcircuit_encoded_HHS.h(qrs[qri][mapping[2]])
@@ -250,47 +249,47 @@ def encoded_HHS_circuit(mapping, qp, qri=0, cri=0):
 
 # The bare gates
 ################
-def bare_X1_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_X1 = qp.create_circuit("bX1"+str(pair),qrs,crs)
+def bare_X1_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_X1 = quantump.create_circuit("bX1"+str(pair), qrs, crs)
     qcircuit_bare_X1.x(qrs[qri][pair[0]])
     return qcircuit_bare_X1
 
-def bare_X2_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_X2 = qp.create_circuit("bX2"+str(pair),qrs,crs)
+def bare_X2_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_X2 = quantump.create_circuit("bX2"+str(pair), qrs, crs)
     qcircuit_bare_X2.x(qrs[qri][pair[1]])
     return qcircuit_bare_X2
 
-def bare_Z1_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_Z1 = qp.create_circuit("bZ1"+str(pair),qrs,crs)
+def bare_Z1_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_Z1 = quantump.create_circuit("bZ1"+str(pair), qrs, crs)
     qcircuit_bare_Z1.z(qrs[qri][pair[1]])
     return qcircuit_bare_Z1
 
-def bare_Z2_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_Z2 = qp.create_circuit("bZ2"+str(pair),qrs,crs)
+def bare_Z2_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_Z2 = quantump.create_circuit("bZ2"+str(pair), qrs, crs)
     qcircuit_bare_Z2.z(qrs[qri][pair[1]])
     return qcircuit_bare_Z2
 
-def bare_CZ_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_CZ = qp.create_circuit("bCZ"+str(pair),qrs,crs)
+def bare_CZ_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_CZ = quantump.create_circuit("bCZ"+str(pair), qrs, crs)
     qcircuit_bare_CZ.h(qrs[qri][pair[1]])
     qcircuit_bare_CZ.cx(qrs[qri][pair[0]],qrs[0][pair[1]])
     qcircuit_bare_CZ.h(qrs[qri][pair[1]])
     return qcircuit_bare_CZ
 
-def bare_HHS_circuit(pair, qp, qri=0, cri=0):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
-    qcircuit_bare_HHS = qp.create_circuit("bHHS"+str(pair),qrs,crs)
+def bare_HHS_circuit(pair, quantump, qri=0, cri=0):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
+    qcircuit_bare_HHS = quantump.create_circuit("bHHS"+str(pair), qrs, crs)
     qcircuit_bare_HHS.h(qrs[qri][pair[0]])
     qcircuit_bare_HHS.h(qrs[qri][pair[1]])
     return qcircuit_bare_HHS
@@ -299,17 +298,17 @@ def bare_HHS_circuit(pair, qp, qri=0, cri=0):
 ###################################
 
 DICT_ENCODED = dict(zip(
-                        ['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>FTv1','e|00>FTv2','e|00>NFTv1','e|00>NFTv2','e|0+>','e|00>+|11>'],
+                        ['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>ftv2','e|00>nftv1','e|00>nftv2','e|0+>','e|00>+|11>'],
                                  [encoded_X1_circuit,
                                   encoded_X2_circuit,
                                   encoded_Z1_circuit,
                                   encoded_Z2_circuit,
                                   encoded_HHS_circuit,
                                   encoded_CZ_circuit,
-                                  encoded_00_prep_FTv1,
-                                  encoded_00_prep_FTv2,
-                                  encoded_00_prep_NFTv1,
-                                  encoded_00_prep_NFTv2,
+                                  encoded_00_prep_ftv1,
+                                  encoded_00_prep_ftv2,
+                                  encoded_00_prep_nftv1,
+                                  encoded_00_prep_nftv2,
                                   encoded_0p_prep,
                                   encoded_2cat_prep]))
 
@@ -350,21 +349,21 @@ CIRCUITS = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
 
 # The names of the different versions for encoding |00> and the chosen mapping
 ##############################################################################
-ENCODED_VERSION_LIST = ['FTv1', 'FTv2', 'NFTv1', 'NFTv2']
-MAPPING = [3,2,1,4]
+ENCODED_VERSION_LIST = ['ftv1', 'ftv2', 'nftv1', 'nftv2']
+MAPPING = [3, 2, 1, 4]
 
 # Function that assembles all circuits within a given QuantumProgram module
 ###########################################################################
 
-def all_circuits(qp, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, dict_bare=DICT_BARE, dict_encoded=DICT_ENCODED, encoded_version_list=ENCODED_VERSION_LIST):
-    qrs = [qp.get_quantum_register(qrn) for qrn in qp.get_quantum_register_names()]
-    crs = [qp.get_classical_register(crn) for crn in qp.get_classical_register_names()]
+def all_circuits(quantump, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, dict_bare=DICT_BARE, dict_encoded=DICT_ENCODED, encoded_version_list=ENCODED_VERSION_LIST):
+    qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
+    crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
     circuit_names = []
     for lc in circuits:
         for pair in possible_pairs:
-            qcirc = qp.create_circuit('bM'+'-'.join(reversed(lc[0]))+lc[1]+str(pair),qrs,crs)
+            qcirc = quantump.create_circuit('bM'+'-'.join(reversed(lc[0]))+lc[1]+str(pair), qrs, crs)
             circuit_names.append('bM'+'-'.join(reversed(lc[0]))+lc[1]+str(pair))
-            qcirc.extend(dict_bare['b'+lc[1]](pair,qp))
+            qcirc.extend(dict_bare['b'+lc[1]](pair,quantump))
             number_swap = 0
             for g in lc[0]:
                 if g[0]=='X' or g[0]=='Z':
@@ -374,23 +373,23 @@ def all_circuits(qp, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, dict_ba
                     key = 'b'+g
                 else:
                     key = 'b'+g
-                qcirc.extend(dict_bare[key](pair,qp))
-            qcirc.extend(measure_all(qp))
+                qcirc.extend(dict_bare[key](pair,quantump))
+            qcirc.extend(measure_all(quantump))
         if lc[1]=='|00>':
             for v in encoded_version_list:
-                qcirc = qp.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1]+v,qrs,crs)
+                qcirc = quantump.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1]+v, qrs, crs)
                 circuit_names.append('eM'+'-'.join(reversed(lc[0]))+lc[1]+v)
-                qcirc.extend(dict_encoded['e'+lc[1]+v](qp))
+                qcirc.extend(dict_encoded['e'+lc[1]+v](quantump))
                 for g in lc[0]:
-                    qcirc.extend(dict_encoded['e'+g](mapping,qp))
-                qcirc.extend(measure_all(qp))
+                    qcirc.extend(dict_encoded['e'+g](mapping,quantump))
+                qcirc.extend(measure_all(quantump))
         else:
-            qcirc = qp.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1],qrs,crs)
+            qcirc = quantump.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1], qrs, crs)
             circuit_names.append('eM'+'-'.join(reversed(lc[0]))+lc[1])
-            qcirc.extend(dict_encoded['e'+lc[1]](qp))
+            qcirc.extend(dict_encoded['e'+lc[1]](quantump))
             for g in lc[0]:
-                qcirc.extend(dict_encoded['e'+g](mapping,qp))
-            qcirc.extend(measure_all(qp))
+                qcirc.extend(dict_encoded['e'+g](mapping,quantump))
+            qcirc.extend(measure_all(quantump))
     return circuit_names
             
 
