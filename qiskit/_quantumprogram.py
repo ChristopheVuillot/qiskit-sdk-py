@@ -1040,7 +1040,7 @@ class QuantumProgram(object):
 
         job_processor = JobProcessor(q_job_list, max_workers=5, api=self.__api,
                                      callback=self._jobs_done_callback)
-        job_processor.submit()
+        job_processor.submit(wait, timeout, silent)
 
 
     def _jobs_done_callback(self, jobs_results):
