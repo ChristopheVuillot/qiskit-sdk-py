@@ -7,6 +7,7 @@
 #
 ###########################################################################################
 
+import time
 import random
 import numpy as np
 import matplotlib.pyplot as plt
@@ -387,16 +388,48 @@ def all_circuits(quantump, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, d
             qcirc = quantump.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1], qrs, crs)
             circuit_names.append('eM'+'-'.join(reversed(lc[0]))+lc[1])
             qcirc.extend(dict_encoded['e'+lc[1]](quantump))
-            for g in lc[0]:
-                qcirc.extend(dict_encoded['e'+g](mapping,quantump))
+            for gate in lc[0]:
+                qcirc.extend(dict_encoded['e'+gate](mapping, quantump))
             qcirc.extend(measure_all(quantump))
     return circuit_names
-            
+
+
+# Callback function for the run circuits
+########################################
+
+def post_treatment(res):
+    '''Callback function to write the results into a file after the jobs are finished.
+    '''
+    with open('data/callback.log', 'a') as logfile:
+        logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+'\n')
+        logfile.close()
+    circuit_names = res.get_names()
+    for circuit_name in circuit_names:
+        circuit_data = res.get_data(circuit_name)
+        filename = 'data/' + circuit_name + '_' + circuit_data['date']+'.txt'
+        with open(filename, 'w') as data_file:
+            data_file.write(str(circuit_data['counts']))
+            data_file.close()
+
+def post_treatment_list(results):
+    '''Callback function to write the results into a file after the jobs are finished.
+    '''
+    for res in results:
+        with open('data/callback.log', 'a') as logfile:
+            logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+'\n')
+            logfile.close()
+        circuit_names = res.get_names()
+        for circuit_name in circuit_names:
+            circuit_data = res.get_data(circuit_name)
+            filename = 'data/' + circuit_name + '_' + circuit_data['date']+'.txt'
+            with open(filename, 'w') as data_file:
+                data_file.write(str(circuit_data['counts']))
+                data_file.close()
 
 
 # Function that creates all the qasm codes and misc information about the circuits to be run
 def create_all_circuits(cp):
-    
+
     # The circuits for the experiment with input state and output distribution
     circuits = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
                 [['HHS', 'Z1', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],

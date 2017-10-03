@@ -75,7 +75,7 @@ class Result(object):
         return ret
 
     def _is_error(self):
-         return self.__result['status'] == 'ERROR'
+        return self.__result['status'] == 'ERROR'
 
     def get_status(self):
         """Return whole qobj result status."""
