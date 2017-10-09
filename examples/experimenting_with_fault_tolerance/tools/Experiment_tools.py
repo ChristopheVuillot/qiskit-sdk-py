@@ -12,6 +12,7 @@ import random
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import t, norm
+from qiskit import QISKitError
 
 # Functions that helps deciding what is the "best" pair of qubits
 #################################################################
@@ -411,8 +412,8 @@ def post_treatment(res):
             with open(filename, 'w') as data_file:
                 data_file.write(str(circuit_data['counts']))
                 data_file.close()
-    except QISKiterror as qiskit_err:
-        if str(qiskit_err)=='Time Out':
+    except QISKitError as qiskit_err:
+        if str(qiskit_err)=='\'Time Out\'':
             with open('data/timed_out.txt', 'a') as timed_out_file:
                 timed_out_file.write(res.get_job_id())
                 timed_out_file.close()
@@ -433,8 +434,8 @@ def post_treatment_list(results):
                 with open(filename, 'w') as data_file:
                     data_file.write(str(circuit_data['counts']))
                     data_file.close()
-        except QISKiterror as qiskit_err:
-            if str(qiskit_err)=='Time Out':
+        except QISKitError as qiskit_err:
+            if str(qiskit_err)=='\'Time Out\'':
                 with open('data/timed_out.txt', 'a') as timed_out_file:
                     timed_out_file.write(res.get_job_id())
                     timed_out_file.close()
