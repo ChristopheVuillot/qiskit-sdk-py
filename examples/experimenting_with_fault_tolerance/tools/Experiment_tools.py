@@ -401,7 +401,7 @@ def post_treatment(res):
     '''Callback function to write the results into a file after the jobs are finished.
     '''
     with open('data/callback.log', 'a') as logfile:
-        logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+'\n')
+        logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+' - '+res.get_job_id()+'\n')
         logfile.close()
     circuit_names = res.get_names()
     for circuit_name in circuit_names:
@@ -416,7 +416,7 @@ def post_treatment_list(results):
     '''
     for res in results:
         with open('data/callback.log', 'a') as logfile:
-            logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+'\n')
+            logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+' - '+res.get_job_id()+'\n')
             logfile.close()
         circuit_names = res.get_names()
         for circuit_name in circuit_names:

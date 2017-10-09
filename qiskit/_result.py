@@ -107,6 +107,18 @@ class Result(object):
         except KeyError:
             raise QISKitError('No  qasm for circuit "{0}"'.format(name))
 
+    def get_job_id(self):
+        """Get the id provided by the api for the job.
+
+        Returns:
+            The id for the ran job as a string.
+        """
+        try:
+            id_string = self.__result['job_id']
+            return id_string
+        except KeyError:
+            raise QISKitError('No id string for this result.')
+
     def get_data(self, name):
         """Get the data of cicuit name.
 
