@@ -13,6 +13,7 @@ class Result(object):
 
         qobj =  { -- the quantum object that was complied --}
         result = {
+            "job_id": --job_id (string),
             "status": --status (string),
             "result":
                 [
@@ -32,6 +33,8 @@ class Result(object):
     def __init__(self, qobj_result, qobj):
         self.__qobj = qobj
         self.__result = qobj_result
+        if not 'job_id' in self.__result:
+            self.__result['job_id'] = 'NO_JOB_ID'
 
     def __str__(self):
         """Get the status of the run.
@@ -90,6 +93,14 @@ class Result(object):
         return [circuit_result['status']
                 for circuit_result in self.__result['result']]
 
+    def get_job_id(self):
+        """Return the job id assigned by the api if this is a remote job.
+
+        Returns:
+            a string containing the job id.
+        """
+        return self.__result['job_id']
+
     def get_ran_qasm(self, name):
         """Get the ran qasm for the named circuit and backend.
 
@@ -106,18 +117,6 @@ class Result(object):
                     return qobj["circuits"][index]["compiled_circuit_qasm"]
         except KeyError:
             raise QISKitError('No  qasm for circuit "{0}"'.format(name))
-
-    def get_job_id(self):
-        """Get the id provided by the api for the job.
-
-        Returns:
-            The id for the ran job as a string.
-        """
-        try:
-            id_string = self.__result['job_id']
-            return id_string
-        except KeyError:
-            raise QISKitError('No id string for this result.')
 
     def get_data(self, name):
         """Get the data of cicuit name.
