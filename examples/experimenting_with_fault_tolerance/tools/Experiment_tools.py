@@ -415,7 +415,7 @@ def post_treatment(res):
     except QISKitError as qiskit_err:
         if str(qiskit_err)=='\'Time Out\'':
             with open('data/timed_out.txt', 'a') as timed_out_file:
-                timed_out_file.write(res.get_job_id())
+                timed_out_file.write(res.get_job_id()+'\n')
                 timed_out_file.close()
             
 
@@ -437,9 +437,33 @@ def post_treatment_list(results):
         except QISKitError as qiskit_err:
             if str(qiskit_err)=='\'Time Out\'':
                 with open('data/timed_out.txt', 'a') as timed_out_file:
-                    timed_out_file.write(res.get_job_id())
+                    timed_out_file.write(res.get_job_id()+'\n')
                     timed_out_file.close()
 
+
+# Function to fetch previously timed out results
+def fetch_previous(filename, api):
+    '''Function that fetch previously ran experiements whose ids are stored in data/filename
+    '''
+    with open('data/'+filename, 'r') as ids_file_read:
+        id_lines = ids_file_read.readlines()
+        ids_file_read.close()
+        with open('data/'+filename, 'w') as ids_file_write:
+            for id_line in id_lines:
+                id_string = id_line.rstrip()
+                job_result = api.get_job(id_string)
+                if not job_result['status']=='COMPLETED':
+                    ids_file_write.write(id_line)
+                else:
+                    with open('data/completed_'+filename, 'a') as comp_file:
+                        comp_file.write(id_line)
+                        comp_file.close()
+                    with open('data/api_dump_'+id_string+'.txt', 'w') as data_file:
+                        data_file.write(str(job_result))
+                        data_file.close()
+            ids_file_write.close()
+                    
+        
 
 # Function that creates all the qasm codes and misc information about the circuits to be run
 def create_all_circuits(cp):
