@@ -128,7 +128,7 @@ def encoded_00_prep_ftv2(quantump, qri=0):
     qc_ftv2.h(qrs[qri][4])
     #qc_ftv2.measure(qrs[qri][0],crs[cri][0])
     return qc_ftv2
-    
+
 def encoded_00_prep_nftv2(quantump, qri=0):
     qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
     crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
@@ -156,21 +156,20 @@ def encoded_0p_prep(quantump, qri=0):
     qc_0p.h(qrs[qri][1])
     qc_0p.h(qrs[qri][3])
     qc_0p.cx(qrs[qri][3], qrs[qri][2])
-    qc_0p.extend(swap_circuit([2,1],quantump))
-    qc_0p.cx(qrs[qri][2],qrs[qri][4])
+    qc_0p.extend(swap_circuit([2,1], quantump))
+    qc_0p.cx(qrs[qri][2], qrs[qri][4])
     return qc_0p
-    
+
 def encoded_2cat_prep(quantump, qri=0, cri=0):
     qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
     crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
     qc_2cat = quantump.create_circuit("e|00>+|11>", qrs, crs)
     qc_2cat.h(qrs[qri][2])
     qc_2cat.h(qrs[qri][3])
-    qc_2cat.cx(qrs[qri][2],qrs[qri][1])
-    qc_2cat.cx(qrs[qri][3],qrs[qri][4])
+    qc_2cat.cx(qrs[qri][2], qrs[qri][1])
+    qc_2cat.cx(qrs[qri][3], qrs[qri][4])
     return qc_2cat
-    
-    
+
 # The bare preparations
 #######################
 def bare_00_prep(pair, quantump, qri=0, cri=0):
@@ -191,7 +190,7 @@ def bare_2cat_prep(pair, quantump, qri=0, cri=0):
     crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
     qcircuit_bare_2cat = quantump.create_circuit("b|00>+|11>"+str(pair), qrs, crs)
     qcircuit_bare_2cat.h(qrs[qri][pair[0]])
-    qcircuit_bare_2cat.cx(qrs[qri][pair[0]],qrs[qri][pair[1]])
+    qcircuit_bare_2cat.cx(qrs[qri][pair[0]], qrs[qri][pair[1]])
     return qcircuit_bare_2cat
 
 # The encoded gates
@@ -351,9 +350,9 @@ CIRCUITS = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
 ##############################################################################
 ENCODED_VERSION_LIST = ['ftv1', 'ftv2', 'nftv1', 'nftv2']
 MAPPING = [3, 2, 1, 4]
-CODEWORDS = [['0000','1111'],['1100','0011'],['1010','0101'],['1001','0110']]
-MAPPED_CODEWORDS = [[],[],[],[]]
-for i,cl in enumerate(CODEWORDS):
+CODEWORDS = [['0000', '1111'], ['1100', '0011'], ['1010', '0101'], ['1001', '0110']]
+MAPPED_CODEWORDS = [[], [], [], []]
+for i, cl in enumerate(CODEWORDS):
     for c in cl:
         MAPPED_CODEWORDS[i].append(''.join(list(reversed([c[j-1] for j in MAPPING])))+'0')
 
@@ -367,25 +366,25 @@ def all_circuits(quantump, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, d
         for pair in possible_pairs:
             qcirc = quantump.create_circuit('bM'+'-'.join(reversed(lc[0]))+lc[1]+str(pair), qrs, crs)
             circuit_names.append('bM'+'-'.join(reversed(lc[0]))+lc[1]+str(pair))
-            qcirc.extend(dict_bare['b'+lc[1]](pair,quantump))
+            qcirc.extend(dict_bare['b'+lc[1]](pair, quantump))
             number_swap = 0
             for g in lc[0]:
-                if g[0]=='X' or g[0]=='Z':
+                if g[0] == 'X' or g[0] == 'Z':
                     key = 'b'+g[0]+str(((int(g[1]) - 1 + number_swap) % 2) + 1)
-                elif g[0]=='H':
+                elif g[0] == 'H':
                     number_swap += 1
                     key = 'b'+g
                 else:
                     key = 'b'+g
-                qcirc.extend(dict_bare[key](pair,quantump))
+                qcirc.extend(dict_bare[key](pair, quantump))
             qcirc.extend(measure_all(quantump))
-        if lc[1]=='|00>':
+        if lc[1] == '|00>':
             for v in encoded_version_list:
                 qcirc = quantump.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1]+v, qrs, crs)
                 circuit_names.append('eM'+'-'.join(reversed(lc[0]))+lc[1]+v)
                 qcirc.extend(dict_encoded['e'+lc[1]+v](quantump))
                 for g in lc[0]:
-                    qcirc.extend(dict_encoded['e'+g](mapping,quantump))
+                    qcirc.extend(dict_encoded['e'+g](mapping, quantump))
                 qcirc.extend(measure_all(quantump))
         else:
             qcirc = quantump.create_circuit('eM'+'-'.join(reversed(lc[0]))+lc[1], qrs, crs)
@@ -414,10 +413,10 @@ def post_treatment(res):
         with open('data/completed.txt', 'a') as completed_file:
             completed_file.write(res.get_job_id()+'\n')
     except QISKitError as qiskit_err:
-        if str(qiskit_err)=='\'Time Out\'':
+        if str(qiskit_err) == '\'Time Out\'':
             with open('data/timed_out.txt', 'a') as timed_out_file:
                 timed_out_file.write(res.get_job_id()+'\n')
-            
+
 
 def post_treatment_list(results):
     '''Callback function to write the results into a file after the jobs are finished.
@@ -435,7 +434,7 @@ def post_treatment_list(results):
             with open('data/completed.txt', 'a') as completed_file:
                 completed_file.write(res.get_job_id()+'\n')
         except QISKitError as qiskit_err:
-            if str(qiskit_err)=='\'Time Out\'':
+            if str(qiskit_err) == '\'Time Out\'':
                 with open('data/timed_out.txt', 'a') as timed_out_file:
                     timed_out_file.write(res.get_job_id()+'\n')
 
@@ -451,7 +450,7 @@ def fetch_previous(filename, api):
         for id_line in id_lines:
             id_string = id_line.rstrip()
             job_result = api.get_job(id_string)
-            if not job_result['status']=='COMPLETED':
+            if not job_result['status'] == 'COMPLETED':
                 ids_file_write.write(id_line)
             else:
                 new += 1
@@ -460,7 +459,7 @@ def fetch_previous(filename, api):
                 with open('data/API_dumps/api_dump_'+id_string+'.txt', 'w') as data_file:
                     data_file.write(str(job_result))
     return new
-                    
+
 
 # Functions to analyse gathered data
 ####################################
@@ -475,14 +474,14 @@ def get_qasm_name_dict(compiled_qobj_list):
 
 def api_data_to_dict(res,name):
     data_dict = {'name' : name}
-    data_dict.setdefault('raw_counts',{}).update(res['data']['counts'])
+    data_dict.setdefault('raw_counts', {}).update(res['data']['counts'])
     data_dict['counts'] = {'00' : 0, '01' : 0, '10' : 0, '11' : 0, 'err' : 0, 'total_valid' : 0}
     data_dict['qasm_count'] = len(res['qasm'].split('\n')) - 5
     n = len(name)
     number_H = name.count('H')/2
     
-    if name[0]=='b':
-        circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-6]][0]
+    if name[0] == 'b':
+        circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1] == name[2:n-6]][0]
         data_dict['expected_distribution_array'] = np.array(circuit_info[2], dtype=float)
         pair = eval(name[n-6:n])
         data_dict['version'] = 'bare'
@@ -491,14 +490,14 @@ def api_data_to_dict(res,name):
         for key in res['data']['counts']:
             data_dict['counts'][''.join([key[4-j] for j in pair])] += res['data']['counts'][key]
             data_dict['counts']['total_valid'] += res['data']['counts'][key]
-            
-    elif name[0]=='e':
+
+    elif name[0] == 'e':
         if 'nftv' in name[n-5:n]:
-            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-5]][0]
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1] == name[2:n-5]][0]
         elif 'ftv' in name[n-5:n]:
-            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-4]][0]
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1] == name[2:n-4]][0]
         else:
-            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n]][0]
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1] == name[2:n]][0]
         data_dict['expected_distribution_array'] = np.array(circuit_info[2], dtype=float)
         data_dict['version'] = 'encoded'
         for key in res['data']['counts']:
@@ -511,8 +510,8 @@ def api_data_to_dict(res,name):
                     break
             if not found:
                 data_dict['counts']['err'] += res['data']['counts'][key]
-                    
-    data_dict['experimental_distribution_array'] = np.array([data_dict['counts'][s]/data_dict['counts']['total_valid'] 
+
+    data_dict['experimental_distribution_array'] = np.array([data_dict['counts'][s]/data_dict['counts']['total_valid']
                                                              for s in ['00', '01', '10', '11']],dtype=float)
     data_dict['post_selection_ratio'] = data_dict['counts']['total_valid']/(data_dict['counts']['err']+data_dict['counts']['total_valid'])
     data_dict['stat_dist'] = .5*sum(np.abs(data_dict['experimental_distribution_array']-data_dict['expected_distribution_array']))
@@ -520,16 +519,16 @@ def api_data_to_dict(res,name):
                                      *(1-data_dict['experimental_distribution_array'])
                                      /data_dict['counts']['total_valid'])
     stat_dist_stand_dev = 0
-    for j in range(0,4):
+    for j in range(0, 4):
         stat_dist_stand_dev += data_dict['experimental_distribution_array'][j]*(1-data_dict['experimental_distribution_array'][j])/(4*data_dict['counts']['total_valid'])
-    for i in range(0,4):
-        for j in range(0,4):
-            if i!=j:
+    for i in range(0, 4):
+        for j in range(0, 4):
+            if i != j:
                 stat_dist_stand_dev += data_dict['experimental_distribution_array'][i]*data_dict['experimental_distribution_array'][j]/(4*data_dict['counts']['total_valid'])
     stat_dist_stand_dev = np.sqrt(stat_dist_stand_dev)
     data_dict['stat_dist_stand_dev'] = stat_dist_stand_dev
     return data_dict
-    
+
 
 def process_api_dump(filename, dict_qasm_name, dict_res={}):
     with open(filename, 'r') as api_dump_file:
@@ -537,9 +536,9 @@ def process_api_dump(filename, dict_qasm_name, dict_res={}):
     for res in job_results['qasms']:
         names = dict_qasm_name['OPENQASM 2.0;'+res['qasm']]
         for name in names:
-            res_entry = api_data_to_dict(res,name)
+            res_entry = api_data_to_dict(res, name)
             res_entry['calibration'] = job_results['calibration']
-            dict_res.setdefault(name,[]).append(res_entry)
+            dict_res.setdefault(name, []).append(res_entry)
             with open('data/Processed_data/' + name + '.txt', 'a') as circuit_file:
                 circuit_file.write(str(res_entry) + '\n')
     return dict_res
