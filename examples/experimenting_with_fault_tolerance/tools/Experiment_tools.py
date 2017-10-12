@@ -16,7 +16,6 @@ from qiskit import QISKitError
 
 # Functions that helps deciding what is the "best" pair of qubits
 #################################################################
-
 def convert_rate(time_t, time_gate):
     if time_t['unit'] == 'ns':
         multiplier_t = 10**(-9)
@@ -298,7 +297,6 @@ def bare_HHS_circuit(pair, quantump, qri=0, cri=0):
 
 # The dictionaries for all circuits
 ###################################
-
 DICT_ENCODED = dict(zip(
                         ['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>ftv2','e|00>nftv1','e|00>nftv2','e|0+>','e|00>+|11>'],
                                  [encoded_X1_circuit,
@@ -353,10 +351,14 @@ CIRCUITS = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
 ##############################################################################
 ENCODED_VERSION_LIST = ['ftv1', 'ftv2', 'nftv1', 'nftv2']
 MAPPING = [3, 2, 1, 4]
+CODEWORDS = [['0000','1111'],['1100','0011'],['1010','0101'],['1001','0110']]
+MAPPED_CODEWORDS = [[],[],[],[]]
+for i,cl in enumerate(CODEWORDS):
+    for c in cl:
+        MAPPED_CODEWORDS[i].append(''.join(list(reversed([c[j-1] for j in MAPPING])))+'0')
 
 # Function that assembles all circuits within a given QuantumProgram module
 ###########################################################################
-
 def all_circuits(quantump, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, dict_bare=DICT_BARE, dict_encoded=DICT_ENCODED, encoded_version_list=ENCODED_VERSION_LIST):
     qrs = [quantump.get_quantum_register(qrn) for qrn in quantump.get_quantum_register_names()]
     crs = [quantump.get_classical_register(crn) for crn in quantump.get_classical_register_names()]
@@ -397,26 +399,24 @@ def all_circuits(quantump, possible_pairs, mapping=MAPPING, circuits=CIRCUITS, d
 
 # Callback function for the run circuits
 ########################################
-
 def post_treatment(res):
     '''Callback function to write the results into a file after the jobs are finished.
     '''
     with open('data/callback.log', 'a') as logfile:
         logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+' - id: '+res.get_job_id()+'\n')
-        logfile.close()
     circuit_names = res.get_names()
     try:
         for circuit_name in circuit_names:
             circuit_data = res.get_data(circuit_name)
-            filename = 'data/' + circuit_name + '_' + circuit_data['date']+'.txt'
+            filename = 'data/Raw_counts/' + circuit_name + '_' + circuit_data['date']+'.txt'
             with open(filename, 'w') as data_file:
                 data_file.write(str(circuit_data['counts']))
-                data_file.close()
+        with open('data/completed.txt', 'a') as completed_file:
+            completed_file.write(res.get_job_id()+'\n')
     except QISKitError as qiskit_err:
         if str(qiskit_err)=='\'Time Out\'':
             with open('data/timed_out.txt', 'a') as timed_out_file:
                 timed_out_file.write(res.get_job_id()+'\n')
-                timed_out_file.close()
             
 
 def post_treatment_list(results):
@@ -425,222 +425,125 @@ def post_treatment_list(results):
     for res in results:
         with open('data/callback.log', 'a') as logfile:
             logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+' - id: '+res.get_job_id()+'\n')
-            logfile.close()
         circuit_names = res.get_names()
         try:
             for circuit_name in circuit_names:
                 circuit_data = res.get_data(circuit_name)
-                filename = 'data/' + circuit_name + '_' + circuit_data['date']+'.txt'
+                filename = 'data/Raw_counts/' + circuit_name + '_' + circuit_data['date']+'.txt'
                 with open(filename, 'w') as data_file:
                     data_file.write(str(circuit_data['counts']))
-                    data_file.close()
+            with open('data/completed.txt', 'a') as completed_file:
+                completed_file.write(res.get_job_id()+'\n')
         except QISKitError as qiskit_err:
             if str(qiskit_err)=='\'Time Out\'':
                 with open('data/timed_out.txt', 'a') as timed_out_file:
                     timed_out_file.write(res.get_job_id()+'\n')
-                    timed_out_file.close()
 
 
 # Function to fetch previously timed out results
 def fetch_previous(filename, api):
     '''Function that fetch previously ran experiements whose ids are stored in data/filename
     '''
+    new = 0
     with open('data/'+filename, 'r') as ids_file_read:
         id_lines = ids_file_read.readlines()
-        ids_file_read.close()
-        with open('data/'+filename, 'w') as ids_file_write:
-            for id_line in id_lines:
-                id_string = id_line.rstrip()
-                job_result = api.get_job(id_string)
-                if not job_result['status']=='COMPLETED':
-                    ids_file_write.write(id_line)
-                else:
-                    with open('data/completed_'+filename, 'a') as comp_file:
-                        comp_file.write(id_line)
-                        comp_file.close()
-                    with open('data/api_dump_'+id_string+'.txt', 'w') as data_file:
-                        data_file.write(str(job_result))
-                        data_file.close()
-            ids_file_write.close()
+    with open('data/'+filename, 'w') as ids_file_write:
+        for id_line in id_lines:
+            id_string = id_line.rstrip()
+            job_result = api.get_job(id_string)
+            if not job_result['status']=='COMPLETED':
+                ids_file_write.write(id_line)
+            else:
+                new += 1
+                with open('data/completed_'+filename, 'a') as comp_file:
+                    comp_file.write(id_line)
+                with open('data/API_dumps/api_dump_'+id_string+'.txt', 'w') as data_file:
+                    data_file.write(str(job_result))
+    return new
                     
-        
 
-# Function that creates all the qasm codes and misc information about the circuits to be run
-def create_all_circuits(cp):
-    # The circuits for the experiment with input state and output distribution
-    circuits = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['HHS', 'Z1', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['HHS', 'Z1', 'Z2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['HHS', 'Z2', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['Z2', 'X2'], '|00>+|11>', [0, .5, .5, 0]],
-                [['X1', 'Z2'], '|0+>', [0, 0, .5, .5]],
-                [['HHS', 'Z1'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['HHS', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['X1', 'X2'], '|00>', [0, 0, 0, 1]],
-                [['HHS', 'Z2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['X1'], '|00>+|11>', [0, .5, .5, 0]],
-                [['X1'], '|0+>', [0, 0, .5, .5]],
-                [['HHS'], '|00>', [0.25, 0.25, 0.25, 0.25]],
-                [['Z2'], '|00>+|11>', [.5, 0, 0, .5]],
-                [['Z2'], '|0+>', [.5, .5, 0, 0]],
-                [['X1'], '|00>', [0, 0, 1, 0]],
-                [['X2'], '|00>', [0, 1, 0, 0]],
-                [[], '|00>+|11>', [.5, 0, 0, .5]],
-                [[], '|0+>', [.5, .5, 0, 0]],
-                [[], '|00>', [1, 0, 0, 0]]]
+# Functions to analyse gathered data
+####################################
 
-    # Definition of the possible gates to perform and their possible qasm implementations
-    gates = ['X1','X2','Z1','Z2','HHS','CZ']
+# Function to get the dictionary of qasm vs circuit name
+def get_qasm_name_dict(compiled_qobj_list):
+    dictionary = {}
+    for n, v in zip(sum([[circuit['compiled_circuit_qasm'] for circuit in batch['circuits']] for batch in compiled_qobj_list],[]),
+                    sum([[circuit['name'] for circuit in batch['circuits']] for batch in compiled_qobj_list],[])):
+        dictionary.setdefault(n, []).append(v)
+    return dictionary
 
-    # Count of 1- and 2-qubit physical gates
-    gate_count_bare_1q = [1,1,1,1,2,2]
-    gate_count_bare_2q = [0,0,0,0,0,1]
-
-    gate_count_encoded_1q = [2,2,2,2,4,4]
-    gate_count_encoded_2q = [0,0,0,0,0,0]
-
-    # Doing the SWAP in software require swapping X1<->X2 and Z1<->Z2 depending on how many SWAPs have been done before
-    indices = [[0,1,2,3,4,5],[1,0,3,2,4,5]];
-
-    # QASM code for the gates in their bare version
-    gates_qasm = [['x q['+str(cp[0])+'];\n'],
-                  ['x q['+str(cp[1])+'];\n'],
-                  ['z q['+str(cp[0])+'];\n'],
-                  ['z q['+str(cp[1])+'];\n'],
-                  ['h q['+str(cp[0])+'];\nh q['+str(cp[1])+'];\n'],
-                  ['h q['+str(cp[1])+'];\ncx q['+str(cp[0])+'], q['+str(cp[1])+'];\nh q['+str(cp[1])+'];\n']]
-
-    # QASM code for the gates in their encoded version
-    gates_qasm_encoded = [['x q[1];\nx q[4];\n','x q[2];\nx q[3];\n'],
-                          ['x q[1];\nx q[3];\n','x q[2];\nx q[4];\n'],
-                          ['z q[1];\nz q[3];\n','z q[2];\nz q[4];\n'],
-                          ['z q[1];\nz q[4];\n','z q[2];\nz q[3];\n'],
-                          ['h q[1];\nh q[2];\nh q[3];\nh q[4];\n'],
-                          ['s q[1];\ns q[2];\ns q[3];\ns q[4];\n']]
-
-    #names of input states
-    state_names = ['|00>','|0+>','|00>+|11>']
-
-    # Definition of the pre- and post- circuits
-    code_heading = """
-OPENQASM 2.0;
-include "qelib1.inc";
-qreg q[5];
-creg c[5];
-"""
-
-    bare_pre_circuit = ["","",""]
-    bare_pre_circuit_count_1q = [0,1,1]
-    bare_pre_circuit_count_2q = [0,0,1]
+def api_data_to_dict(res,name):
+    data_dict = {'name' : name}
+    data_dict.setdefault('raw_counts',{}).update(res['data']['counts'])
+    data_dict['counts'] = {'00' : 0, '01' : 0, '10' : 0, '11' : 0, 'err' : 0, 'total_valid' : 0}
+    data_dict['qasm_count'] = len(res['qasm'].split('\n')) - 5
+    n = len(name)
+    number_H = name.count('H')/2
     
-    bare_pre_circuit[1] = """
-h q["""+str(cp[1])+"""];
-barrier q["""+str(cp[0])+"""],q["""+str(cp[1])+"""];
-"""
+    if name[0]=='b':
+        circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-6]][0]
+        data_dict['expected_distribution_array'] = np.array(circuit_info[2], dtype=float)
+        pair = eval(name[n-6:n])
+        data_dict['version'] = 'bare'
+        if number_H % 2 == 1:
+            pair.reverse()
+        for key in res['data']['counts']:
+            data_dict['counts'][''.join([key[4-j] for j in pair])] += res['data']['counts'][key]
+            data_dict['counts']['total_valid'] += res['data']['counts'][key]
+            
+    elif name[0]=='e':
+        if 'nftv' in name[n-5:n]:
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-5]][0]
+        elif 'ftv' in name[n-5:n]:
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n-4]][0]
+        else:
+            circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1]==name[2:n]][0]
+        data_dict['expected_distribution_array'] = np.array(circuit_info[2], dtype=float)
+        data_dict['version'] = 'encoded'
+        for key in res['data']['counts']:
+            found = False
+            for i,codeword_list in enumerate(MAPPED_CODEWORDS):
+                if key in codeword_list:
+                    data_dict['counts']["{0:02b}".format(i)] += res['data']['counts'][key]
+                    data_dict['counts']['total_valid'] += res['data']['counts'][key]
+                    found = True
+                    break
+            if not found:
+                data_dict['counts']['err'] += res['data']['counts'][key]
+                    
+    data_dict['experimental_distribution_array'] = np.array([data_dict['counts'][s]/data_dict['counts']['total_valid'] 
+                                                             for s in ['00', '01', '10', '11']],dtype=float)
+    data_dict['post_selection_ratio'] = data_dict['counts']['total_valid']/(data_dict['counts']['err']+data_dict['counts']['total_valid'])
+    data_dict['stat_dist'] = .5*sum(np.abs(data_dict['experimental_distribution_array']-data_dict['expected_distribution_array']))
+    data_dict['stand_dev'] = np.sqrt(data_dict['experimental_distribution_array']
+                                     *(1-data_dict['experimental_distribution_array'])
+                                     /data_dict['counts']['total_valid'])
+    stat_dist_stand_dev = 0
+    for j in range(0,4):
+        stat_dist_stand_dev += data_dict['experimental_distribution_array'][j]*(1-data_dict['experimental_distribution_array'][j])/(4*data_dict['counts']['total_valid'])
+    for i in range(0,4):
+        for j in range(0,4):
+            if i!=j:
+                stat_dist_stand_dev += data_dict['experimental_distribution_array'][i]*data_dict['experimental_distribution_array'][j]/(4*data_dict['counts']['total_valid'])
+    stat_dist_stand_dev = np.sqrt(stat_dist_stand_dev)
+    data_dict['stat_dist_stand_dev'] = stat_dist_stand_dev
+    return data_dict
     
-    bare_pre_circuit[2] = """
-h q["""+str(cp[0])+"""];
-cx q["""+str(cp[0])+"""], q["""+str(cp[1])+"""];
-barrier q["""+str(cp[0])+"""],q["""+str(cp[1])+"""];
-"""
-    
-    bare_post_circuit = """
-measure q["""+str(cp[0])+"""] -> c["""+str(cp[0])+"""];
-measure q["""+str(cp[1])+"""] -> c["""+str(cp[1])+"""];
-"""
-    
-    encoded_pre_circuit = ["","",""]
-    encoded_pre_circuit_count_1q = [11,6,2]
-    encoded_pre_circuit_count_2q = [8,5,2]
-    
-    encoded_pre_circuit[0] = """
-h q[3];
-cx q[3],q[4];
-cx q[4],q[2];
-cx q[1],q[2];
-h q[1];
-h q[2];
-cx q[1],q[2];
-h q[1];
-h q[2];
-cx q[1],q[2];
-cx q[3],q[2];
-h q[0];
-h q[1];
-h q[2];
-cx q[0],q[1];
-cx q[0],q[2];
-h q[0];
-h q[1];
-h q[2];
-barrier q[0],q[1],q[2],q[3],q[4];
-"""
-    
-    encoded_pre_circuit[1] = """
-h q[3];
-cx q[3],q[2];
-cx q[1],q[2];
-h q[1];
-h q[2];
-cx q[1],q[2];
-h q[1];
-h q[2];
-cx q[1],q[2];
-h q[4];
-cx q[4],q[2];
-barrier q[0],q[1],q[2],q[3],q[4];
-"""
-    
-    encoded_pre_circuit[2] = """
-h q[3];
-cx q[3],q[4];
-h q[1];
-cx q[1],q[2];
-barrier q[0],q[1],q[2],q[3],q[4];
-"""
-   
-    encoded_post_circuit = """
-measure q[0] -> c[0];
-measure q[1] -> c[1];
-measure q[2] -> c[2];
-measure q[3] -> c[3];
-measure q[4] -> c[4];
-"""
-    
-    #For each circuit, concatenating the state preparation code, the circuit code and the measurment code
-    #Adding some misc information about the circuits on the way.
-    circuit_list = []
-    
-    for c in circuits:
-        idx = 0
-        qasm_bare = code_heading + bare_pre_circuit[state_names.index(c[1])]
-        qasm_encoded = code_heading + encoded_pre_circuit[state_names.index(c[1])]
-        circuit_gate_count_bare_1q = bare_pre_circuit_count_1q[state_names.index(c[1])]
-        circuit_gate_count_bare_2q = bare_pre_circuit_count_2q[state_names.index(c[1])]
-        circuit_gate_count_encoded_1q = encoded_pre_circuit_count_1q[state_names.index(c[1])]
-        circuit_gate_count_encoded_2q = encoded_pre_circuit_count_2q[state_names.index(c[1])]
-        for g in c[0]:
-            k = gates.index(g)
-            if g=='HHS':
-                idx = (idx + 1) % 2
-            l = len(gates_qasm[k])
-            qasm_bare += gates_qasm[indices[idx][k]][random.randrange(0,l)]
-            l = len(gates_qasm_encoded[k])
-            qasm_encoded += gates_qasm_encoded[k][random.randrange(0,l)]
-            circuit_gate_count_bare_1q += gate_count_bare_1q[k]
-            circuit_gate_count_bare_2q += gate_count_bare_2q[k]
-            circuit_gate_count_encoded_1q += gate_count_encoded_1q[k]
-            circuit_gate_count_encoded_2q += gate_count_encoded_2q[k]
-        
-        circuit_list.append({'circuit_desc':" ".join(c[0]),
-                             'qasm_bare':qasm_bare + bare_post_circuit,
-                             'qasm_encoded':qasm_encoded + encoded_post_circuit,
-                             'nH':idx,
-                             'gate_count_bare':(circuit_gate_count_bare_1q,circuit_gate_count_bare_2q),
-                             'gate_count_encoded':(circuit_gate_count_encoded_1q,circuit_gate_count_encoded_2q),
-                             'input_state':c[1],
-                             'output_distribution':c[2]})
-    return circuit_list
+
+def process_api_dump(filename, dict_qasm_name, dict_res={}):
+    with open(filename, 'r') as api_dump_file:
+        job_results = eval(api_dump_file.read())
+    for res in job_results['qasms']:
+        names = dict_qasm_name['OPENQASM 2.0;'+res['qasm']]
+        for name in names:
+            res_entry = api_data_to_dict(res,name)
+            res_entry['calibration'] = job_results['calibration']
+            dict_res.setdefault(name,[]).append(res_entry)
+            with open('data/Processed_data/' + name + '.txt', 'a') as circuit_file:
+                circuit_file.write(str(res_entry) + '\n')
+    return dict_res
+
 
 # Function that analyse one run (8192 shots) of one circuit in its bare version
 def analysis_one_bare_expe(expe_bare, circuit, cpp):
