@@ -543,6 +543,19 @@ def process_api_dump(filename, dict_qasm_name, dict_res={}):
                 circuit_file.write(str(res_entry) + '\n')
     return dict_res
 
+def process_all_api_dumps(file_of_files_to_process, file_of_already_processed_files, dict_qasm_name):
+    n_processed = 0
+    with open(file_of_already_processed_files, 'r') as file_processed:
+        processed = file_processed.readlines()
+    with open(file_of_files_to_process, 'r') as file_to_process:
+        to_process = file_to_process.readlines()
+    with open(file_of_already_processed_files, 'a') as file_processed:
+        for filename in to_process:
+            if not filename in processed:
+                n_processed += 1
+                process_api_dump('data/API_dumps/api_dump_' + filename.rstrip() + '.txt', dict_qasm_name)
+                file_processed.write(filename)
+    return n_processed
 
 # Function that analyse one run (8192 shots) of one circuit in its bare version
 def analysis_one_bare_expe(expe_bare, circuit, cpp):
