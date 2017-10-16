@@ -8,7 +8,6 @@
 ###########################################################################################
 
 import time
-import random
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.stats import t, norm
@@ -479,7 +478,7 @@ def api_data_to_dict(res,name):
     data_dict['qasm_count'] = len(res['qasm'].split('\n')) - 5
     n = len(name)
     number_H = name.count('H')/2
-    
+
     if name[0] == 'b':
         circuit_info = [c for c in CIRCUITS if '-'.join(reversed(c[0]))+c[1] == name[2:n-6]][0]
         data_dict['expected_distribution_array'] = np.array(circuit_info[2], dtype=float)
@@ -559,7 +558,7 @@ def process_all_api_dumps(file_of_files_to_process, file_of_already_processed_fi
 
 # Function that analyse one run (8192 shots) of one circuit in its bare version
 def analysis_one_bare_expe(expe_bare, circuit, cpp):
-    
+
     raw_labels_list = [['0','0','0','0','0'],['0','0','0','0','0'],['0','0','0','0','0'],['0','0','0','0','0']];
     raw_labels_list[1][4-cpp[1]] = '1';
     raw_labels_list[2][4-cpp[0]] = '1';
