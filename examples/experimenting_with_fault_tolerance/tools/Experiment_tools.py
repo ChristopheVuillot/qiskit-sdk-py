@@ -7,8 +7,12 @@
 #
 ###########################################################################################
 
+import re
+import os
 import time
 import numpy as np
+# next import is used when using eval function on stored processed_data. Very clean yes.
+from numpy import array
 import matplotlib.pyplot as plt
 from scipy.stats import t, norm
 from qiskit import QISKitError
@@ -295,31 +299,30 @@ def bare_HHS_circuit(pair, quantump, qri=0, cri=0):
 
 # The dictionaries for all circuits
 ###################################
-DICT_ENCODED = dict(zip(
-                        ['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>ftv2','e|00>nftv1','e|00>nftv2','e|0+>','e|00>+|11>'],
-                                 [encoded_X1_circuit,
-                                  encoded_X2_circuit,
-                                  encoded_Z1_circuit,
-                                  encoded_Z2_circuit,
-                                  encoded_HHS_circuit,
-                                  encoded_CZ_circuit,
-                                  encoded_00_prep_ftv1,
-                                  encoded_00_prep_ftv2,
-                                  encoded_00_prep_nftv1,
-                                  encoded_00_prep_nftv2,
-                                  encoded_0p_prep,
-                                  encoded_2cat_prep]))
+DICT_ENCODED = dict(zip(['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>ftv2','e|00>nftv1','e|00>nftv2','e|0+>','e|00>+|11>'],
+                        [encoded_X1_circuit,
+                         encoded_X2_circuit,
+                         encoded_Z1_circuit,
+                         encoded_Z2_circuit,
+                         encoded_HHS_circuit,
+                         encoded_CZ_circuit,
+                         encoded_00_prep_ftv1,
+                         encoded_00_prep_ftv2,
+                         encoded_00_prep_nftv1,
+                         encoded_00_prep_nftv2,
+                         encoded_0p_prep,
+                         encoded_2cat_prep]))
 
 DICT_BARE = dict(zip(['bX1','bX2','bZ1','bZ2','bHHS','bCZ','b|00>','b|0+>','b|00>+|11>'],
-                              [bare_X1_circuit,
-                               bare_X2_circuit,
-                               bare_Z1_circuit,
-                               bare_Z2_circuit,
-                               bare_HHS_circuit,
-                               bare_CZ_circuit,
-                               bare_00_prep,
-                               bare_0p_prep,
-                               bare_2cat_prep]))
+                     [bare_X1_circuit,
+                      bare_X2_circuit,
+                      bare_Z1_circuit,
+                      bare_Z2_circuit,
+                      bare_HHS_circuit,
+                      bare_CZ_circuit,
+                      bare_00_prep,
+                      bare_0p_prep,
+                      bare_2cat_prep]))
 
 
 # The circuits for the experiment with input state and output distribution
@@ -471,7 +474,7 @@ def get_qasm_name_dict(compiled_qobj_list):
         dictionary.setdefault(n, []).append(v)
     return dictionary
 
-def api_data_to_dict(res,name):
+def api_data_to_dict(res, name):
     data_dict = {'name' : name}
     data_dict.setdefault('raw_counts', {}).update(res['data']['counts'])
     data_dict['counts'] = {'00' : 0, '01' : 0, '10' : 0, '11' : 0, 'err' : 0, 'total_valid' : 0}
@@ -555,6 +558,127 @@ def process_all_api_dumps(file_of_files_to_process, file_of_already_processed_fi
                 process_api_dump('data/API_dumps/api_dump_' + filename.rstrip() + '.txt', dict_qasm_name)
                 file_processed.write(filename)
     return n_processed
+
+def repair_processed_data(filename, new_ext='_repaired'):
+    n_repaired = 0
+    repaired_lines = []
+    with open(filename, 'r') as file:
+        lines = file.readlines()
+    iter_lines = iter(lines)
+    for line in iter_lines:
+        n = len(line.rstrip())
+        if line.rstrip()[n-1] == ',':
+            next_line = next(iter_lines)
+            repaired_lines.append(line.rstrip()+next_line)
+            n_repaired += 1
+        else:
+            repaired_lines.append(line)
+    if n_repaired > 0:
+        new_filename = filename.split('.')[0] + new_ext + '.txt'
+        with open(new_filename, 'w') as new_file:
+            new_file.writelines(repaired_lines)
+    return n_repaired
+
+
+def plot_everything_raw(folder):
+    list_file = os.listdir(folder)
+    n_circuit = len(list_file)
+    n_skipped = 0
+    n_keapt = 0
+    cmap = plt.cm.get_cmap('gist_ncar')
+    plt.figure(figsize=(20, 20))
+    for j, circuit_filename in enumerate(list_file):
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        stat_dist = []
+        qasm_count = []
+        for expe_data_string in expe_list:
+            try:
+                expe_data = eval(expe_data_string)
+                qasm_count.append(expe_data['qasm_count'])
+                stat_dist.append(expe_data['stat_dist'])
+                n_keapt += 1
+            except SyntaxError as syntax_error:
+                n_skipped += 1
+        plt.scatter(qasm_count, stat_dist, label=circuit_filename, marker='x', c=cmap(j/n_circuit))
+        #if circuit_filename[0] == 'b' or 'nft' in circuit_filename or '|0+>' in circuit_filename:
+        #    color = 'r'
+        #else:
+        #    color = 'b'
+        #plt.scatter(qasm_count, stat_dist, label=circuit_filename, c=color)
+    plt.title('all experiments')
+    plt.legend(loc='lower left', bbox_to_anchor=(1, 0))
+    plt.yscale('log')
+    plt.grid()
+    plt.show()
+    print(n_skipped, n_keapt)
+
+def plot_everything_binned(folder):
+    list_file = os.listdir(folder)
+    n_skipped = 0
+    n_kept = 0
+    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 1\\].txt'),
+                 re.compile('[\\S]*\\[2, 4\\].txt'),
+                 re.compile('[\\S]*\\[3, 2\\].txt'),
+                 re.compile('[\\S]*\\[3, 4\\].txt'),
+                 re.compile('[\\S]*>ftv1.txt'),
+                 re.compile('[\\S]*>ftv2.txt'),
+                 re.compile('[\\S]*nftv1.txt'),
+                 re.compile('[\\S]*nftv2.txt'),
+                 re.compile('e[\\S]*\\|0+>.txt'),
+                 re.compile('e[\\S]*\\|00>+\\|11>.txt')]
+    labels = ['bare[1, 0]',
+              'bare[2, 0]',
+              'bare[2, 1]',
+              'bare[2, 4]',
+              'bare[3, 2]',
+              'bare[3, 4]',
+              'encoded|00>ftv1',
+              'encoded|00>ftv2',
+              'encoded|00>nftv1',
+              'encoded|00>nftv2',
+              'encoded|0+>',
+              'encoded|00>+|11>']
+    cmap = plt.cm.get_cmap('Paired')
+    colors = [cmap(j/12) for j in range(0, 12)]
+    qasm_counts = [[] for j in range(0, 12)]
+    stat_dists = [[] for j in range(0, 12)]
+    plt.figure(figsize=(20, 20))
+    for j, circuit_filename in enumerate(list_file):
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for j, reg_ex in enumerate(re_labels):
+            if reg_ex.match(circuit_filename):
+                color = colors[j]
+                label = labels[j]
+                break
+        for expe_data_string in expe_list:
+            try:
+                expe_data = eval(expe_data_string)
+                qasm_counts[j].append(expe_data['qasm_count'])
+                stat_dists[j].append(expe_data['stat_dist'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+    plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
+    plt.title('all experiments')
+    plt.legend(loc='lower left', bbox_to_anchor=(1, 0))
+    plt.yscale('log')
+    plt.grid()
+    plt.show()
+    print(n_skipped, n_kept)
+
+
+
+
+
+
+
+
+
+
 
 # Function that analyse one run (8192 shots) of one circuit in its bare version
 def analysis_one_bare_expe(expe_bare, circuit, cpp):
