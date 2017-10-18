@@ -57,6 +57,34 @@ def rank_qubit_pairs(quantump, backend):
         pairs_numbers[pair] = sorted(numbers, reverse=True)
     return (sorted(pairs_numbers, key=pairs_numbers.__getitem__), pairs_numbers)
 
+def rank_qubit_pairs_conf(configuration, couplings):
+    pairs_numbers = dict([(tuple(c), []) for c in couplings])
+    for pair, numbers in pairs_numbers.items():
+        numbers.append(configuration['qubits'][pair[0]]['gateError']['value'])
+        numbers.append(configuration['qubits'][pair[0]]['readoutError']['value'])
+        numbers.append(configuration['qubits'][pair[1]]['gateError']['value'])
+        numbers.append(configuration['qubits'][pair[1]]['readoutError']['value'])
+        for multiq_calib in configuration['multiQubitGates']:
+            if multiq_calib['qubits'] == list(pair):
+                numbers.append(multiq_calib['gateError']['value'])
+        numbers.append(convert_rate(configuration['qubits'][pair[0]]['T1'], configuration['qubits'][pair[0]]['gateTime']))
+        numbers.append(convert_rate(configuration['qubits'][pair[0]]['T2'], configuration['qubits'][pair[0]]['gateTime']))
+        numbers.append(convert_rate(configuration['qubits'][pair[1]]['T1'], configuration['qubits'][pair[1]]['gateTime']))
+        numbers.append(convert_rate(configuration['qubits'][pair[1]]['T2'], configuration['qubits'][pair[1]]['gateTime']))
+    for pair, numbers in pairs_numbers.items():
+        pairs_numbers[pair] = sorted(numbers, reverse=True)
+    return (sorted(pairs_numbers, key=pairs_numbers.__getitem__), pairs_numbers)
+
+def rank_qubit_pairs_readout(configuration, couplings):
+    pairs_numbers = dict([(tuple(c), []) for c in couplings])
+    for pair, numbers in pairs_numbers.items():
+        numbers.append(configuration['qubits'][pair[0]]['readoutError']['value'])
+        numbers.append(configuration['qubits'][pair[1]]['readoutError']['value'])
+    for pair, numbers in pairs_numbers.items():
+        pairs_numbers[pair] = sorted(numbers, reverse=True)
+    return (sorted(pairs_numbers, key=pairs_numbers.__getitem__), pairs_numbers)
+
+
 # Functions that create all the circuits inside a given QuantumProgram module
 #############################################################################
 
@@ -300,7 +328,7 @@ def bare_HHS_circuit(pair, quantump, qri=0, cri=0):
 
 # The dictionaries for all circuits
 ###################################
-DICT_ENCODED = dict(zip(['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>ftv2','e|00>nftv1','e|00>nftv2','e|0+>','e|00>+|11>'],
+DICT_ENCODED = dict(zip(['eX1', 'eX2', 'eZ1', 'eZ2', 'eHHS', 'eCZ', 'e|00>ftv1', 'e|00>ftv2', 'e|00>nftv1', 'e|00>nftv2', 'e|0+>', 'e|00>+|11>'],
                         [encoded_X1_circuit,
                          encoded_X2_circuit,
                          encoded_Z1_circuit,
@@ -314,7 +342,7 @@ DICT_ENCODED = dict(zip(['eX1','eX2','eZ1','eZ2','eHHS','eCZ','e|00>ftv1','e|00>
                          encoded_0p_prep,
                          encoded_2cat_prep]))
 
-DICT_BARE = dict(zip(['bX1','bX2','bZ1','bZ2','bHHS','bCZ','b|00>','b|0+>','b|00>+|11>'],
+DICT_BARE = dict(zip(['bX1', 'bX2', 'bZ1', 'bZ2', 'bHHS', 'bCZ', 'b|00>', 'b|0+>', 'b|00>+|11>'],
                      [bare_X1_circuit,
                       bare_X2_circuit,
                       bare_Z1_circuit,
@@ -672,7 +700,7 @@ def plot_everything_binned(folder):
     print(n_skipped, n_kept)
 
 
-def plot_everything_averaged(folder):
+def plot_everything_averaged(folder, logscaley=True):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -705,6 +733,7 @@ def plot_everything_averaged(folder):
     qasm_counts = [[] for j in range(0, 12)]
     stat_dists = [[] for j in range(0, 12)]
     stdevs = [[] for j in range(0, 12)]
+    conf_ints = [[] for j in range(0, 12)]
     fig, ax = plt.subplots(figsize=(20, 20))
     for j, circuit_filename in enumerate(list_file):
         total = 0
@@ -727,6 +756,82 @@ def plot_everything_averaged(folder):
         stat_dists[j].append(stat_dist_avg/total)
         qasm_counts[j].append(expe_data['qasm_count'])
         stdevs[j].append(statistics.stdev(values))
+        ct = t.interval(0.99, len(values)-1, loc=0, scale=1)[1]
+        conf_ints[j].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+    #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
+    for j in range(0,12):
+        ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+    handles, labs = ax.get_legend_handles_labels()
+    ax.set_title('all experiments')
+    ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    if logscaley:
+        ax.set_yscale('log')
+    ax.grid(True)
+    fig.tight_layout()
+    plt.show()
+    print(n_skipped, n_kept)
+
+
+def plot_everything_averaged_bare_ranked(folder):
+    list_file = os.listdir(folder)
+    n_skipped = 0
+    n_kept = 0
+    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 1\\].txt'),
+                 re.compile('[\\S]*\\[2, 4\\].txt'),
+                 re.compile('[\\S]*\\[3, 2\\].txt'),
+                 re.compile('[\\S]*\\[3, 4\\].txt'),
+                 re.compile('[\\S]*>ftv1.txt'),
+                 re.compile('[\\S]*>ftv2.txt'),
+                 re.compile('[\\S]*nftv1.txt'),
+                 re.compile('[\\S]*nftv2.txt'),
+                 re.compile('e[\\S]*\\|0+>.txt'),
+                 re.compile('e[\\S]*\\|00>+\\|11>.txt')]
+    pairs = [[1, 0], [2, 0], [2, 1], [2, 4], [3, 2], [3, 4]]
+    labels = ['bare1',
+              'bare2',
+              'bare3',
+              'bare4',
+              'bare5',
+              'bare6',
+              'encoded|00>ftv1',
+              'encoded|00>ftv2',
+              'encoded|00>nftv1',
+              'encoded|00>nftv2',
+              'encoded|0+>',
+              'encoded|00>+|11>']
+    cmap = plt.cm.get_cmap('Paired')
+    colors = [cmap(j/12) for j in range(0, 12)]
+    qasm_counts = [[] for j in range(0, 12)]
+    stat_dists = [[] for j in range(0, 12)]
+    stdevs = [[] for j in range(0, 12)]
+    fig, ax = plt.subplots(figsize=(20, 20))
+    for j, circuit_filename in enumerate(list_file):
+        total = 0
+        stat_dist_avg = 0
+        values = []
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for j, reg_ex in enumerate(re_labels):
+            if reg_ex.match(circuit_filename):
+                break
+        for expe_data_string in expe_list:
+            try:
+                expe_data = eval(expe_data_string)
+                if j<6:
+                    pair = pairs[j]
+                    ranking, _ = rank_qubit_pairs_conf(expe_data['calibration'], pairs)
+                    j = ranking.index(tuple(pair))
+                total += 1
+                stat_dist_avg += expe_data['stat_dist']
+                values.append(expe_data['stat_dist'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+        stat_dists[j].append(stat_dist_avg/total)
+        qasm_counts[j].append(expe_data['qasm_count'])
+        stdevs[j].append(statistics.stdev(values))
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
     for j in range(0,12):
         ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(stdevs[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
@@ -738,8 +843,6 @@ def plot_everything_averaged(folder):
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
-
-
 
 
 
