@@ -361,20 +361,20 @@ CIRCUITS = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['HHS', 'Z1', 'Z2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['HHS', 'Z2', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['Z2', 'X2'], '|00>+|11>', [0, .5, .5, 0]],
-            [['X1', 'Z2'], '|0+>', [0, 0, .5, .5]],
+            [['X1', 'Z2'], '|0+>', [0, .5, 0, .5]],
             [['HHS', 'Z1'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['HHS', 'CZ'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['X1', 'X2'], '|00>', [0, 0, 0, 1]],
             [['HHS', 'Z2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['X1'], '|00>+|11>', [0, .5, .5, 0]],
-            [['X1'], '|0+>', [0, 0, .5, .5]],
+            [['X1'], '|0+>', [0, .5, 0, .5]],
             [['HHS'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [['Z2'], '|00>+|11>', [.5, 0, 0, .5]],
-            [['Z2'], '|0+>', [.5, .5, 0, 0]],
-            [['X1'], '|00>', [0, 0, 1, 0]],
-            [['X2'], '|00>', [0, 1, 0, 0]],
+            [['Z2'], '|0+>', [.5, 0, .5, 0]],
+            [['X1'], '|00>', [0, 1, 0, 0]],
+            [['X2'], '|00>', [0, 0, 1, 0]],
             [[], '|00>+|11>', [.5, 0, 0, .5]],
-            [[], '|0+>', [.5, .5, 0, 0]],
+            [[], '|0+>', [.5, 0, .5, 0]],
             [[], '|00>', [1, 0, 0, 0]]]
 
 # The names of the different versions for encoding |00> and the chosen mapping
@@ -507,7 +507,7 @@ def api_data_to_dict(res, name):
     data_dict = {'name' : name}
     data_dict.setdefault('raw_counts', {}).update(res['data']['counts'])
     data_dict['counts'] = {'00' : 0, '01' : 0, '10' : 0, '11' : 0, 'err' : 0, 'total_valid' : 0}
-    data_dict['qasm_count'] = len(res['qasm'].split('\n')) - 5
+    data_dict['qasm_count'] = len([q_instr for q_instr in res['qasm'].split('\n') if len(q_instr) > 0]) - 3
     n = len(name)
     number_H = name.count('H')/2
 
@@ -519,7 +519,7 @@ def api_data_to_dict(res, name):
         if number_H % 2 == 1:
             pair.reverse()
         for key in res['data']['counts']:
-            data_dict['counts'][''.join([key[4-j] for j in pair])] += res['data']['counts'][key]
+            data_dict['counts'][''.join([key[4-j] for j in reversed(pair)])] += res['data']['counts'][key]
             data_dict['counts']['total_valid'] += res['data']['counts'][key]
 
     elif name[0] == 'e':
@@ -642,7 +642,20 @@ def plot_everything_raw(folder):
     plt.show()
     print(n_skipped, n_keapt)
 
-def plot_everything_binned(folder):
+PLOT_LABELS = ['bare[1, 0]',
+               'bare[2, 0]',
+               'bare[2, 1]',
+               'bare[2, 4]',
+               'bare[3, 2]',
+               'bare[3, 4]',
+               'encoded|00>ftv1',
+               'encoded|00>ftv2',
+               'encoded|00>nftv1',
+               'encoded|00>nftv2',
+               'encoded|0+>',
+               'encoded|00>+|11>']
+
+def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.99):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -656,8 +669,8 @@ def plot_everything_binned(folder):
                  re.compile('[\\S]*>ftv2.txt'),
                  re.compile('[\\S]*nftv1.txt'),
                  re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0+>.txt'),
-                 re.compile('e[\\S]*\\|00>+\\|11>.txt')]
+                 re.compile('e[\\S]*\\|0\\+>.txt'),
+                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
     labels = ['bare[1, 0]',
               'bare[2, 0]',
               'bare[2, 1]',
@@ -671,65 +684,7 @@ def plot_everything_binned(folder):
               'encoded|0+>',
               'encoded|00>+|11>']
     cmap = plt.cm.get_cmap('Paired')
-    colors = [cmap(j/12) for j in range(0, 12)]
-    qasm_counts = [[] for j in range(0, 12)]
-    stat_dists = [[] for j in range(0, 12)]
-    plt.figure(figsize=(20, 20))
-    for j, circuit_filename in enumerate(list_file):
-        with open(folder+circuit_filename, 'r') as circuit_file:
-            expe_list = circuit_file.readlines()
-        for j, reg_ex in enumerate(re_labels):
-            if reg_ex.match(circuit_filename):
-                color = colors[j]
-                label = labels[j]
-                break
-        for expe_data_string in expe_list:
-            try:
-                expe_data = eval(expe_data_string)
-                qasm_counts[j].append(expe_data['qasm_count'])
-                stat_dists[j].append(expe_data['stat_dist'])
-                n_kept += 1
-            except SyntaxError:
-                n_skipped += 1
-    plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    plt.title('all experiments')
-    plt.legend(loc='lower left', bbox_to_anchor=(1, 0))
-    plt.yscale('log')
-    plt.grid()
-    plt.show()
-    print(n_skipped, n_kept)
-
-
-def plot_everything_averaged(folder, logscaley=True):
-    list_file = os.listdir(folder)
-    n_skipped = 0
-    n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0+>.txt'),
-                 re.compile('e[\\S]*\\|00>+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
-    cmap = plt.cm.get_cmap('Paired')
-    colors = [cmap(j/12) for j in range(0, 12)]
+    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
     stat_dists = [[] for j in range(0, 12)]
     stdevs = [[] for j in range(0, 12)]
@@ -741,8 +696,9 @@ def plot_everything_averaged(folder, logscaley=True):
         values = []
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for j, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(re_labels):
             if reg_ex.match(circuit_filename):
+                index = k
                 break
         for expe_data_string in expe_list:
             try:
@@ -753,26 +709,44 @@ def plot_everything_averaged(folder, logscaley=True):
                 n_kept += 1
             except SyntaxError:
                 n_skipped += 1
-        stat_dists[j].append(stat_dist_avg/total)
-        qasm_counts[j].append(expe_data['qasm_count'])
-        stdevs[j].append(statistics.stdev(values))
-        ct = t.interval(0.99, len(values)-1, loc=0, scale=1)[1]
-        conf_ints[j].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+        #if stat_dist_avg/total > .2:
+            #print(circuit_filename, stat_dist_avg/total)
+        stat_dists[index].append(stat_dist_avg/total)
+        qasm_counts[index].append(expe_data['qasm_count'])
+        stdevs[index].append(statistics.stdev(values))
+        ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+        conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    for j in range(0,12):
+    indices_to_plot = [labels.index(pl) for pl in sublabels]
+    for j in indices_to_plot:
         ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments')
-    ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
     if logscaley:
         ax.set_yscale('log')
     ax.grid(True)
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
+    for k in range(0,6):
+        print(labels[k],statistics.mean(stat_dists[k]))
 
+PLOT_LABELS_RANK = ['bare1',
+                    'bare2',
+                    'bare3',
+                    'bare4',
+                    'bare5',
+                    'bare6',
+                    'encoded|00>ftv1',
+                    'encoded|00>ftv2',
+                    'encoded|00>nftv1',
+                    'encoded|00>nftv2',
+                    'encoded|0+>',
+                    'encoded|00>+|11>']
 
-def plot_everything_averaged_bare_ranked(folder):
+def plot_everything_averaged_bare_ranked(folder, logscaley=True, sublabels=PLOT_LABELS_RANK, ci=.99):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -786,8 +760,8 @@ def plot_everything_averaged_bare_ranked(folder):
                  re.compile('[\\S]*>ftv2.txt'),
                  re.compile('[\\S]*nftv1.txt'),
                  re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0+>.txt'),
-                 re.compile('e[\\S]*\\|00>+\\|11>.txt')]
+                 re.compile('e[\\S]*\\|0\\+>.txt'),
+                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
     pairs = [[1, 0], [2, 0], [2, 1], [2, 4], [3, 2], [3, 4]]
     labels = ['bare1',
               'bare2',
@@ -802,10 +776,14 @@ def plot_everything_averaged_bare_ranked(folder):
               'encoded|0+>',
               'encoded|00>+|11>']
     cmap = plt.cm.get_cmap('Paired')
-    colors = [cmap(j/12) for j in range(0, 12)]
+    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
     stat_dists = [[] for j in range(0, 12)]
     stdevs = [[] for j in range(0, 12)]
+    conf_ints = [[] for j in range(0, 12)]
+    bare_ranked_stat_dists = {}
+    bare_ranked_qasm_counts = {}
+    bare_ranked_stdevs = {}
     fig, ax = plt.subplots(figsize=(20, 20))
     for j, circuit_filename in enumerate(list_file):
         total = 0
@@ -813,36 +791,63 @@ def plot_everything_averaged_bare_ranked(folder):
         values = []
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for j, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(re_labels):
             if reg_ex.match(circuit_filename):
+                index = k
                 break
-        for expe_data_string in expe_list:
-            try:
-                expe_data = eval(expe_data_string)
-                if j<6:
-                    pair = pairs[j]
+        if index < 6:
+            circuit_name = circuit_filename[2:len(circuit_filename)-10]
+            for expe_data_string in expe_list:
+                try:
+                    expe_data = eval(expe_data_string)
+                    pair = pairs[index]
                     ranking, _ = rank_qubit_pairs_conf(expe_data['calibration'], pairs)
-                    j = ranking.index(tuple(pair))
-                total += 1
-                stat_dist_avg += expe_data['stat_dist']
-                values.append(expe_data['stat_dist'])
-                n_kept += 1
-            except SyntaxError:
-                n_skipped += 1
-        stat_dists[j].append(stat_dist_avg/total)
-        qasm_counts[j].append(expe_data['qasm_count'])
-        stdevs[j].append(statistics.stdev(values))
+                    index = ranking.index(tuple(pair))
+                    bare_ranked_stat_dists.setdefault(circuit_name, [[] for j in range(0, 6)])
+                    bare_ranked_qasm_counts.setdefault(circuit_name, [0 for j in range(0, 6)])
+                    bare_ranked_stat_dists[circuit_name][index].append(expe_data['stat_dist'])
+                    bare_ranked_qasm_counts[circuit_name][index] = expe_data['qasm_count']
+                    n_kept += 1
+                except SyntaxError:
+                    n_skipped += 1
+        else:
+            for expe_data_string in expe_list:
+                try:
+                    expe_data = eval(expe_data_string)
+                    total += 1
+                    stat_dist_avg += expe_data['stat_dist']
+                    values.append(expe_data['stat_dist'])
+                    n_kept += 1
+                except SyntaxError:
+                    n_skipped += 1
+            stat_dists[index].append(stat_dist_avg/total)
+            qasm_counts[index].append(expe_data['qasm_count'])
+            stdevs[index].append(statistics.stdev(values))
+            ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+            conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+    for circuit_name, values_lists in bare_ranked_stat_dists.items():
+        for index, values in enumerate(values_lists):
+            stat_dists[index].append(statistics.mean(values))
+            qasm_counts[index].append(bare_ranked_qasm_counts[circuit_name][index])
+            stdevs[index].append(statistics.stdev(values))
+            ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+            conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    for j in range(0,12):
-        ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(stdevs[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+    indices_to_plot = [labels.index(pl) for pl in sublabels]
+    for j in indices_to_plot:
+        ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments')
-    ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
-    ax.set_yscale('log')
+    #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
+    if logscaley:
+        ax.set_yscale('log')
     ax.grid(True)
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
+    for k in range(0,6):
+        print(labels[k],statistics.mean(stat_dists[k]))
 
 
 
