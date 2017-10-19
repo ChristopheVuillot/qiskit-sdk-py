@@ -377,6 +377,8 @@ CIRCUITS = [[['X1', 'HHS', 'CZ', 'X2'], '|00>', [0.25, 0.25, 0.25, 0.25]],
             [[], '|0+>', [.5, 0, .5, 0]],
             [[], '|00>', [1, 0, 0, 0]]]
 
+CIRCUIT_NAMES = ['M'+'-'.join(reversed(c[0]))+c[1] for c in reversed(CIRCUITS)]
+
 # The names of the different versions for encoding |00> and the chosen mapping
 ##############################################################################
 ENCODED_VERSION_LIST = ['ftv1', 'ftv2', 'nftv1', 'nftv2']
@@ -686,6 +688,7 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     cmap = plt.cm.get_cmap('Paired')
     colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
+    circuit_indices = [[] for j in range(0, 12)]
     stat_dists = [[] for j in range(0, 12)]
     stdevs = [[] for j in range(0, 12)]
     conf_ints = [[] for j in range(0, 12)]
@@ -713,13 +716,17 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
             #print(circuit_filename, stat_dist_avg/total)
         stat_dists[index].append(stat_dist_avg/total)
         qasm_counts[index].append(expe_data['qasm_count'])
+        for l,cn in enumerate(CIRCUIT_NAMES):
+            if cn in circuit_filename:
+                circuit_index = l+1
+        circuit_indices[index].append(circuit_index)
         stdevs[index].append(statistics.stdev(values))
         ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
         conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
     indices_to_plot = [labels.index(pl) for pl in sublabels]
     for j in indices_to_plot:
-        ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments')
     #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
@@ -727,6 +734,94 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     if logscaley:
         ax.set_yscale('log')
     ax.grid(True)
+    fig.tight_layout()
+    plt.show()
+    print(n_skipped, n_kept)
+    for k in range(0,6):
+        print(labels[k],statistics.mean(stat_dists[k]))
+
+def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
+    list_file = os.listdir(folder)
+    n_skipped = 0
+    n_kept = 0
+    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 1\\].txt'),
+                 re.compile('[\\S]*\\[2, 4\\].txt'),
+                 re.compile('[\\S]*\\[3, 2\\].txt'),
+                 re.compile('[\\S]*\\[3, 4\\].txt'),
+                 re.compile('[\\S]*>ftv1.txt'),
+                 re.compile('[\\S]*>ftv2.txt'),
+                 re.compile('[\\S]*nftv1.txt'),
+                 re.compile('[\\S]*nftv2.txt'),
+                 re.compile('e[\\S]*\\|0\\+>.txt'),
+                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
+    labels = ['bare[1, 0]',
+              'bare[2, 0]',
+              'bare[2, 1]',
+              'bare[2, 4]',
+              'bare[3, 2]',
+              'bare[3, 4]',
+              'encoded|00>ftv1',
+              'encoded|00>ftv2',
+              'encoded|00>nftv1',
+              'encoded|00>nftv2',
+              'encoded|0+>',
+              'encoded|00>+|11>']
+    cmap = plt.cm.get_cmap('Paired')
+    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
+    qasm_counts = [[] for j in range(0, 12)]
+    circuit_indices = [[] for j in range(0, 12)]
+    stat_dists = [[] for j in range(0, 12)]
+    stdevs = [[] for j in range(0, 12)]
+    conf_ints = [[] for j in range(0, 12)]
+    fig, ax = plt.subplots(figsize=(20, 20))
+    for j, circuit_filename in enumerate(list_file):
+        total = 0
+        stat_dist_avg = 0
+        values = []
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for k, reg_ex in enumerate(re_labels):
+            if reg_ex.match(circuit_filename):
+                index = k
+                break
+        for expe_data_string in expe_list:
+            try:
+                expe_data = eval(expe_data_string)
+                total += 1
+                stat_dist_avg += expe_data['stat_dist']
+                values.append(expe_data['stat_dist'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+        #if stat_dist_avg/total > .2:
+            #print(circuit_filename, stat_dist_avg/total)
+        stat_dists[index].append(stat_dist_avg/total)
+        qasm_counts[index].append(expe_data['qasm_count'])
+        for l,cn in enumerate(CIRCUIT_NAMES):
+            if cn in circuit_filename:
+                circuit_index = l+1
+        circuit_indices[index].append(circuit_index)
+        stdevs[index].append(statistics.stdev(values))
+        ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+        conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+    #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
+    indices_to_plot = [pl for pl in range(6,12)]
+    ax.plot([j for j in range(-1,22)], [0 for j in range(-1,22)], '-r')
+    for j in indices_to_plot:
+        for k in range(0,len(stat_dists[j])):
+            bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
+            stat_dists[j][k] -= bare_ref
+        ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+    handles, labs = ax.get_legend_handles_labels()
+    ax.set_title('Encoded circuits compared to bare qubit pair '+labels[bareindex][4:])
+    #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
+    if logscaley:
+        ax.set_yscale('log')
+    ax.grid(True)
+    ax.set_xlim([0,21])
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
@@ -746,6 +841,8 @@ PLOT_LABELS_RANK = ['bare1',
                     'encoded|0+>',
                     'encoded|00>+|11>']
 
+# The ranking function seems to be not a good ranking function for the performances
+# of the bare circuits.
 def plot_everything_averaged_bare_ranked(folder, logscaley=True, sublabels=PLOT_LABELS_RANK, ci=.99):
     list_file = os.listdir(folder)
     n_skipped = 0
@@ -851,144 +948,6 @@ def plot_everything_averaged_bare_ranked(folder, logscaley=True, sublabels=PLOT_
 
 
 
-
-
-
-
-# Function that analyse one run (8192 shots) of one circuit in its bare version
-def analysis_one_bare_expe(expe_bare, circuit, cpp):
-
-    raw_labels_list = [['0','0','0','0','0'],['0','0','0','0','0'],['0','0','0','0','0'],['0','0','0','0','0']];
-    raw_labels_list[1][4-cpp[1]] = '1';
-    raw_labels_list[2][4-cpp[0]] = '1';
-    raw_labels_list[3][4-cpp[1]] = '1';
-    raw_labels_list[3][4-cpp[0]] = '1';
-    
-    raw_labels = [''.join(rll) for rll in raw_labels_list];
-    
-    data_bare = expe_bare['result']['data']['counts']
-    
-    labels = ['00','01','10','11']
-    labels_bare = sorted(data_bare)
-    
-    values_bare = np.array([0,0,0,0],dtype=float)
-    total_valid_bare = 0
-    total_err_bare = 0
-    
-    for label in labels_bare:
-        if label==raw_labels[0]:
-            values_bare[0] += data_bare[label]
-            total_valid_bare += data_bare[label]
-        elif label==raw_labels[1]:
-            if circuit['nH']==0:
-                values_bare[1] += data_bare[label]
-            else:
-                values_bare[2] += data_bare[label]
-            total_valid_bare += data_bare[label]
-        elif label==raw_labels[2]:
-            if circuit['nH']==0:
-                values_bare[2] += data_bare[label]
-            else:
-                values_bare[1] += data_bare[label]
-            total_valid_bare += data_bare[label]
-        elif label==raw_labels[3]:
-            values_bare[3] += data_bare[label]
-            total_valid_bare += data_bare[label]
-        else:
-            total_err_bare += data_bare[label]
-        
-    values_expectation = np.array(circuit['output_distribution'])
-    
-    stand_dev = np.sqrt(values_bare/total_valid_bare*(1-values_bare/total_valid_bare)/total_valid_bare)
-    
-    post_selected_ratio_bare = total_valid_bare/(total_valid_bare+total_err_bare)
-    
-    stat_dist_bare = .5*sum(np.abs(values_bare/total_valid_bare-values_expectation))
-    
-    stat_dist_stand_dev = 0
-    for j in range(0,4):
-        stat_dist_stand_dev += values_bare[j]/total_valid_bare*(1-values_bare[j]/total_valid_bare)/(4*total_valid_bare)
-    for i in range(0,4):
-        for j in range(0,4):
-            if i!=j:
-                stat_dist_stand_dev += values_bare[i]/total_valid_bare*values_bare[j]/total_valid_bare/(4*total_valid_bare)
-
-    stat_dist_stand_dev = np.sqrt(stat_dist_stand_dev)
-    
-    return {'circuit_desc':circuit['circuit_desc'],
-            'version':'bare',
-            'gate_count':sum(circuit['gate_count_bare']),
-            'input_state':circuit['input_state'],
-            'labels':labels,
-            'values':values_bare,
-            'total_valid':total_valid_bare,
-            'total_err':total_err_bare,
-            'output_distribution':values_expectation,
-            'stand_dev':stand_dev,
-            'post_selected_ratio':post_selected_ratio_bare,
-            'stat_dist':stat_dist_bare,
-            'stat_dist_stand_dev':stat_dist_stand_dev}  
-
-# Function that analyse one run (8192 shots) of one circuit in its encoded version
-def analysis_one_encoded_expe(expe_encoded, circuit):
-
-    data_encoded = expe_encoded['result']['data']['counts']
-    
-    labels = ['00','01','10','11']
-    labels_encoded = sorted(data_encoded)
-    
-    values_encoded = np.array([0,0,0,0],dtype=float)
-    total_valid_encoded = 0
-    total_err_encoded = 0
-    
-    for label in labels_encoded:
-        if label=='00000' or label=='11110':
-            values_encoded[0] += data_encoded[label]
-            total_valid_encoded += data_encoded[label]
-        elif label=='01010' or label=='10100':
-            values_encoded[1] += data_encoded[label]
-            total_valid_encoded += data_encoded[label]
-        elif label=='10010' or label=='01100':
-            values_encoded[2] += data_encoded[label]
-            total_valid_encoded += data_encoded[label]
-        elif label=='11000' or label=='00110':
-            values_encoded[3] += data_encoded[label]
-            total_valid_encoded += data_encoded[label]
-        else:
-            total_err_encoded += data_encoded[label]
-
-    values_expectation = np.array(circuit['output_distribution'])
-    
-    stand_dev = np.sqrt(values_encoded/total_valid_encoded*(1-values_encoded/total_valid_encoded)/total_valid_encoded)
-    
-    post_selected_ratio_encoded = total_valid_encoded/(total_valid_encoded+total_err_encoded)
-
-    stat_dist_encoded = .5*sum(np.abs(values_encoded/total_valid_encoded-values_expectation))
-
-    stat_dist_stand_dev = 0
-    for j in range(0,4):
-        stat_dist_stand_dev += values_encoded[j]/total_valid_encoded*(1-values_encoded[j]/total_valid_encoded)/(4*total_valid_encoded)
-    for i in range(0,4):
-        for j in range(0,4):
-            if i!=j:
-                stat_dist_stand_dev += values_encoded[i]/total_valid_encoded*values_encoded[j]/total_valid_encoded/(4*total_valid_encoded)
-
-    stat_dist_stand_dev = np.sqrt(stat_dist_stand_dev)
-    
-    return {'circuit_desc':circuit['circuit_desc'],
-            'version':'encoded',
-            'gate_count':sum(circuit['gate_count_encoded']), 
-            'input_state':circuit['input_state'],
-            'labels':labels,
-            'values':values_encoded,
-            'total_valid':total_valid_encoded,
-            'total_err':total_err_encoded,
-            'output_distribution':values_expectation,
-            'stand_dev':stand_dev,
-            'post_selected_ratio':post_selected_ratio_encoded,
-            'stat_dist':stat_dist_encoded,
-            'stat_dist_stand_dev':stat_dist_stand_dev}
-
 # Plotting one bare run next to one encoded run with the expected output distribution
 def plot_one_expe(analysed_data1,analysed_data2,confidence):
     N = 4;
@@ -1010,72 +969,3 @@ def plot_one_expe(analysed_data1,analysed_data2,confidence):
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
     
     plt.show();
-
-    
-# Function that analyse all the runs per circuit
-def analyse_all_expe(listlist_bare, listlist_encoded, confidence):
-    
-    all_expe = []
-    
-    for expe in range(0,20):
-        bare_runs = [e[expe] for e in listlist_bare]
-        encoded_runs = [e[expe] for e in listlist_encoded]
-        
-        bare_mean_stat_dist = 0
-        encoded_mean_stat_dist = 0
-        
-        bare_std_dev = 0
-        encoded_std_dev = 0
-        
-        for r in bare_runs:
-            bare_mean_stat_dist += r['stat_dist']/len(bare_runs)
-            
-        for r in encoded_runs:
-            encoded_mean_stat_dist += r['stat_dist']/len(encoded_runs)
-            
-        for r in bare_runs:
-            bare_std_dev += (r['stat_dist']-bare_mean_stat_dist)**2/(len(bare_runs)-1)
-        bare_std_dev = np.sqrt(bare_std_dev)
-        ct = t.interval(confidence, len(bare_runs)-1, loc=0, scale=1)[1]
-        bare_confi = ct*bare_std_dev/np.sqrt(len(bare_runs))
-            
-        for r in encoded_runs:
-            encoded_std_dev += (r['stat_dist']-encoded_mean_stat_dist)**2/(len(encoded_runs)-1)
-        encoded_std_dev = np.sqrt(encoded_std_dev)    
-        ct = t.interval(confidence, len(encoded_runs)-1, loc=0, scale=1)[1]
-        encoded_confi = ct*encoded_std_dev/np.sqrt(len(encoded_runs))
-            
-        all_expe.append({'circuit_desc':bare_runs[0]['circuit_desc'],
-                         'gate_count_bare':bare_runs[0]['gate_count'],
-                         'gate_count_encoded':encoded_runs[0]['gate_count'],
-                         'input_state':bare_runs[0]['input_state'],
-                         'output_distribution':bare_runs[0]['output_distribution'],
-                         'bare_mean_stat_dist':bare_mean_stat_dist,
-                         'encoded_mean_stat_dist':encoded_mean_stat_dist,
-                         'bare_std_dev':bare_std_dev,
-                         'encoded_std_dev':encoded_std_dev,
-                         'bare_conf_int':bare_confi,
-                         'encoded_conf_int':encoded_confi,
-                         'confidence':confidence})
-    return all_expe
-
-# Plotting the difference in statistical distance between encoded and bare version for all circuits
-def plot_stat_dist(all_expe):
-    
-    ng = np.array([e['gate_count_bare'] for e in all_expe])
-    sdb = np.array([e['bare_mean_stat_dist'] for e in all_expe])
-    sde = np.array([e['encoded_mean_stat_dist'] for e in all_expe])
-    cib = np.array([e['bare_conf_int'] for e in all_expe])
-    cie = np.array([e['encoded_conf_int'] for e in all_expe])
-    
-    fig, ax = plt.subplots();
-    
-    ax.errorbar(ng, sde-sdb, yerr=cib+cie, fmt='rx', label='Difference')
-    
-    ax.set_ylabel('Difference')
-    ax.set_xlabel('Number of gates in the bare circuit')
-    ax.set_title('Statistical distances from the ideal distribution\ndepending on the number of gates in the bare circuit\nConfidence interval at '+str(all_expe[0]['confidence']*100)+'%')
-    
-    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
-    plt.grid()
-    plt.show()
