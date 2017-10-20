@@ -828,6 +828,62 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
     for k in range(0,6):
         print(labels[k],statistics.mean(stat_dists[k]))
 
+def save_plot_data_averaged_diff(folder_data, folder_save, bareindex=1, ci=.99):
+    list_file = os.listdir(folder)
+    n_skipped = 0
+    n_kept = 0
+    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 1\\].txt'),
+                 re.compile('[\\S]*\\[2, 4\\].txt'),
+                 re.compile('[\\S]*\\[3, 2\\].txt'),
+                 re.compile('[\\S]*\\[3, 4\\].txt'),
+                 re.compile('[\\S]*>ftv1.txt'),
+                 re.compile('[\\S]*>ftv2.txt'),
+                 re.compile('[\\S]*nftv1.txt'),
+                 re.compile('[\\S]*nftv2.txt'),
+                 re.compile('e[\\S]*\\|0\\+>.txt'),
+                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
+    qasm_counts = [[] for j in range(0, 12)]
+    circuit_indices = [[] for j in range(0, 12)]
+    stat_dists = [[] for j in range(0, 12)]
+    stdevs = [[] for j in range(0, 12)]
+    conf_ints = [[] for j in range(0, 12)]
+    for j, circuit_filename in enumerate(list_file):
+        total = 0
+        stat_dist_avg = 0
+        values = []
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for k, reg_ex in enumerate(re_labels):
+            if reg_ex.match(circuit_filename):
+                index = k
+                break
+        for expe_data_string in expe_list:
+            try:
+                expe_data = eval(expe_data_string)
+                total += 1
+                stat_dist_avg += expe_data['stat_dist']
+                values.append(expe_data['stat_dist'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+        stat_dists[index].append(stat_dist_avg/total)
+        qasm_counts[index].append(expe_data['qasm_count'])
+        for l,cn in enumerate(CIRCUIT_NAMES):
+            if cn in circuit_filename:
+                circuit_index = l+1
+        circuit_indices[index].append(circuit_index)
+        stdevs[index].append(statistics.stdev(values))
+        ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+        conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+    indices_to_plot = [pl for pl in range(6,12)]
+    for j in indices_to_plot:
+        for k in range(0,len(stat_dists[j])):
+            bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
+            stat_dists[j][k] -= bare_ref
+    print(n_skipped, n_kept)
+
 PLOT_LABELS_RANK = ['bare1',
                     'bare2',
                     'bare3',
