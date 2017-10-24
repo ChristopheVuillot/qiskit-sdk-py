@@ -1,3 +1,4 @@
+from scipy.stats import gaussian_kde
 import ast
 import os
 import matplotlib.pyplot as plt
@@ -242,7 +243,7 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
     for k in range(0,6):
         print(labels[k],statistics.mean(stat_dists[k]))
 
-def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_param=False, logscaley=True, sublabels=PLOT_LABELS, ci=.99, x_range=[0,10**(-5)]):
+def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_param=False, logscalex=True, logscaley=True, sublabels=PLOT_LABELS, ci=.99, x_range=[10**(-5),10**(-1)], y_range=[10**(-2), 1]):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -270,8 +271,8 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
               'encoded|00>nftv2',
               'encoded|0+>',
               'encoded|00>+|11>']
-    cmap = plt.cm.get_cmap('Paired')
-    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
+    #cmap = plt.cm.get_cmap('Paired')
+    #colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     stat_dists = [[] for j in range(0, 12)]
     parameter = [[] for j in range(0, 12)]
     fig, ax = plt.subplots(figsize=(20, 20))
@@ -295,14 +296,28 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
                 n_skipped += 1
     indices_to_plot = [labels.index(pl) for pl in sublabels]
     for j in indices_to_plot:
-        ax.scatter(np.array(parameter[j]), np.array(stat_dists[j]), marker='x', label=labels[j], c=colors[j])
+        x = np.array(parameter[j])
+        y = np.array(stat_dists[j])
+
+        # Calculate the point density
+        xy = np.vstack([x,y])
+        z = gaussian_kde(xy)(xy)
+
+        # Sort the points by density, so that the densest points are plotted last
+        idx = z.argsort()
+        x, y, z = x[idx], y[idx], z[idx]
+        ax.scatter(x, y, c=z, s=50, label=labels[j], edgecolor='')
+        #ax.scatter(np.array(parameter[j]), np.array(stat_dists[j]), marker='x', label=labels[j], c=colors[j])
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments vs {} for {} '.format(parameter_name, qubit_index))
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
     if logscaley:
         ax.set_yscale('log')
+    if logscalex:
+        ax.set_xscale('log')
     ax.grid(True)
     ax.set_xlim(x_range)
+    ax.set_ylim(y_range)
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
@@ -365,22 +380,7 @@ def save_plot_data_averaged_diff(folder_data, folder_save, bareindex=1, ci=.99):
             stat_dists[j][k] -= bare_ref
     print(n_skipped, n_kept)
 
-PLOT_LABELS_RANK = ['bare1',
-                    'bare2',
-                    'bare3',
-                    'bare4',
-                    'bare5',
-                    'bare6',
-                    'encoded|00>ftv1',
-                    'encoded|00>ftv2',
-                    'encoded|00>nftv1',
-                    'encoded|00>nftv2',
-                    'encoded|0+>',
-                    'encoded|00>+|11>']
-
-# The ranking function seems to be not a good ranking function for the performances
-# of the bare circuits.
-def plot_everything_averaged_bare_ranked(folder, logscaley=True, sublabels=PLOT_LABELS_RANK, ci=.99):
+def save_relevant_ploting_data(folder, filename):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -396,94 +396,40 @@ def plot_everything_averaged_bare_ranked(folder, logscaley=True, sublabels=PLOT_
                  re.compile('[\\S]*nftv2.txt'),
                  re.compile('e[\\S]*\\|0\\+>.txt'),
                  re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    pairs = [[1, 0], [2, 0], [2, 1], [2, 4], [3, 2], [3, 4]]
-    labels = ['bare1',
-              'bare2',
-              'bare3',
-              'bare4',
-              'bare5',
-              'bare6',
+    labels = ['bare[1, 0]',
+              'bare[2, 0]',
+              'bare[2, 1]',
+              'bare[2, 4]',
+              'bare[3, 2]',
+              'bare[3, 4]',
               'encoded|00>ftv1',
               'encoded|00>ftv2',
               'encoded|00>nftv1',
               'encoded|00>nftv2',
               'encoded|0+>',
               'encoded|00>+|11>']
-    cmap = plt.cm.get_cmap('Paired')
-    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
-    qasm_counts = [[] for j in range(0, 12)]
-    stat_dists = [[] for j in range(0, 12)]
-    stdevs = [[] for j in range(0, 12)]
-    conf_ints = [[] for j in range(0, 12)]
-    bare_ranked_stat_dists = {}
-    bare_ranked_qasm_counts = {}
-    bare_ranked_stdevs = {}
-    fig, ax = plt.subplots(figsize=(20, 20))
-    for j, circuit_filename in enumerate(list_file):
-        total = 0
-        stat_dist_avg = 0
-        values = []
-        with open(folder+circuit_filename, 'r') as circuit_file:
-            expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
-            if reg_ex.match(circuit_filename):
-                index = k
-                break
-        if index < 6:
-            circuit_name = circuit_filename[2:len(circuit_filename)-10]
-            for expe_data_string in expe_list:
-                try:
-                    expe_data = ast.literal_eval(expe_data_string)
-                    pair = pairs[index]
-                    ranking, _ = rank_qubit_pairs_conf(expe_data['calibration'], pairs)
-                    index = ranking.index(tuple(pair))
-                    bare_ranked_stat_dists.setdefault(circuit_name, [[] for j in range(0, 6)])
-                    bare_ranked_qasm_counts.setdefault(circuit_name, [0 for j in range(0, 6)])
-                    bare_ranked_stat_dists[circuit_name][index].append(expe_data['stat_dist'])
-                    bare_ranked_qasm_counts[circuit_name][index] = expe_data['qasm_count']
+    with open(filename, 'w') as file_raw:
+        with open('averaged_'+filename, 'w') as file_avg:
+            for j, circuit_filename in enumerate(list_file):
+                with open(folder+circuit_filename, 'r') as circuit_file:
+                    expe_list = circuit_file.readlines()
+                for k, reg_ex in enumerate(re_labels):
+                    if reg_ex.match(circuit_filename):
+                        index = k
+                        break
+                for expe_data_string in expe_list:
+                    try:
+                        expe_data = ast.literal_eval(expe_data_string)
+                        stat_dists[index].append(expe_data['stat_dist'])
+                        parameter[index].append(convert_parameter(expe_data['calibration']['multiQubitGates'][qubit_index][parameter_name]))
+                        parameter[index].append(convert_parameter(expe_data['calibration']['qubits'][qubit_index][parameter_name]))
                     n_kept += 1
                 except SyntaxError:
                     n_skipped += 1
-        else:
-            for expe_data_string in expe_list:
-                try:
-                    expe_data = ast.literal_eval(expe_data_string)
-                    total += 1
-                    stat_dist_avg += expe_data['stat_dist']
-                    values.append(expe_data['stat_dist'])
-                    n_kept += 1
-                except SyntaxError:
-                    n_skipped += 1
-            stat_dists[index].append(stat_dist_avg/total)
-            qasm_counts[index].append(expe_data['qasm_count'])
-            stdevs[index].append(statistics.stdev(values))
-            ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
-            conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
-    for circuit_name, values_lists in bare_ranked_stat_dists.items():
-        for index, values in enumerate(values_lists):
-            stat_dists[index].append(statistics.mean(values))
-            qasm_counts[index].append(bare_ranked_qasm_counts[circuit_name][index])
-            stdevs[index].append(statistics.stdev(values))
-            ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
-            conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
-    #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    indices_to_plot = [labels.index(pl) for pl in sublabels]
-    for j in indices_to_plot:
-        ax.errorbar(np.array(qasm_counts[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
-    handles, labs = ax.get_legend_handles_labels()
-    ax.set_title('all experiments')
-    #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
-    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
-    if logscaley:
-        ax.set_yscale('log')
-    ax.grid(True)
-    fig.tight_layout()
-    plt.show()
     print(n_skipped, n_kept)
-    for k in range(0,6):
+    for k in range(0,12):
         print(labels[k],statistics.mean(stat_dists[k]))
-
-
+    
 
 # Plotting one bare run next to one encoded run with the expected output distribution
 def plot_one_expe(analysed_data1,analysed_data2,confidence):
