@@ -56,7 +56,7 @@ PLOT_LABELS = ['bare[1, 0]',
                'encoded|0+>',
                'encoded|00>+|11>']
 
-def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.99):
+def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.99, save_data_folder_pref=None):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -125,10 +125,21 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
     indices_to_plot = [labels.index(pl) for pl in sublabels]
     for j in indices_to_plot:
-        ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        l1, l2, l3 = zip(*sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])))
+        ax.errorbar(l1, l2, yerr=l3, markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        if save_data_folder_pref:
+            with open(save_data_folder_pref + labels[j] + '.dat', 'w') as data_file:
+                data_file.write('index stat_dist conf_int99\n')
+                for tup in zip(l1, l2, l3):
+                    data_file.write('{} {} {}\n'.format(*tup))
     l1, l2 = zip(*sorted(zip(circuit_indices[0], qasm_counts[0])))
     ax2 = ax.twinx()
     ax2.plot(l1, l2, 'k-') 
+    if save_data_folder_pref:
+        with open(save_data_folder_pref + 'bare_qasm_count.dat', 'w') as data_file:
+            data_file.write('index qasm_count\n')
+            for tup in zip(l1, l2):
+                data_file.write('{} {}\n'.format(*tup))
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments')
     #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
@@ -144,10 +155,10 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     plt.xticks(range(1,21), [c[1:] for c in CIRCUIT_NAMES], rotation=60, horizontalalignment='right')
     plt.show()
     print(n_skipped, n_kept)
-    for k in range(0,6):
+    for k in range(0,12):
         print(labels[k],statistics.mean(stat_dists[k]))
 
-def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
+def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, plot_qasm_count=False, save_data_folder_pref=None):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
@@ -213,20 +224,27 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
         stdevs[index].append(statistics.stdev(values))
         ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
         conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
-    #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    l1, l2 = zip(*sorted(zip(circuit_indices[bareindex], qasm_counts[bareindex])))
-    ax2 = ax.twinx()
-    ax2.plot(l1, l2, 'k-') 
-    indices_to_plot = [pl for pl in range(6,12)]
+    if plot_qasm_count:
+        ax2 = ax.twinx()
     ax.plot([j for j in range(-1,22)], [0 for j in range(-1,22)], '-r')
+    indices_to_plot = [pl for pl in range(6,12)]
     for j in indices_to_plot:
+        if plot_qasm_count:
+            l1, l2 = zip(*sorted(zip(circuit_indices[j], qasm_counts[j])))
+            ax2.plot(l1, l2, label=labels[j], c=colors[j]) 
         for k in range(0,len(stat_dists[j])):
             bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
             stat_dists[j][k] -= bare_ref
         ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        if save_data_folder_pref:
+            with open(save_data_folder_pref + labels[j] + '-' + labels[bareindex] + '.dat', 'w') as data_file:
+                data_file.write('index stat_dist_diff conf_int99\n')
+                for tup in sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])):
+                    data_file.write('{} {} {}\n'.format(*tup))
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('Encoded circuits compared to bare qubit pair '+labels[bareindex][4:])
-    #ax.legend([h[0] for h in handles], labels, loc='lower left', bbox_to_anchor=(1, 0))
+    if plot_qasm_count:
+        ax2.legend(loc='upper left', bbox_to_anchor=(1, 0))
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
     if logscaley:
         ax.set_yscale('log')
@@ -240,7 +258,7 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99):
     fig.tight_layout()
     plt.show()
     print(n_skipped, n_kept)
-    for k in range(0,6):
+    for k in range(0,12):
         print(labels[k],statistics.mean(stat_dists[k]))
 
 def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_param=False, logscalex=True, logscaley=True, sublabels=PLOT_LABELS, ci=.99, x_range=[10**(-5),10**(-1)], y_range=[10**(-2), 1]):
@@ -423,9 +441,9 @@ def save_relevant_ploting_data(folder, filename):
                         stat_dists[index].append(expe_data['stat_dist'])
                         parameter[index].append(convert_parameter(expe_data['calibration']['multiQubitGates'][qubit_index][parameter_name]))
                         parameter[index].append(convert_parameter(expe_data['calibration']['qubits'][qubit_index][parameter_name]))
-                    n_kept += 1
-                except SyntaxError:
-                    n_skipped += 1
+                        n_kept += 1
+                    except SyntaxError:
+                        n_skipped += 1
     print(n_skipped, n_kept)
     for k in range(0,12):
         print(labels[k],statistics.mean(stat_dists[k]))
