@@ -342,111 +342,48 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
     for k in range(0,12):
         print(labels[k],statistics.mean(stat_dists[k]))
 
-def save_plot_data_averaged_diff(folder_data, folder_save, bareindex=1, ci=.99):
-    list_file = os.listdir(folder_data)
-    n_skipped = 0
-    n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    qasm_counts = [[] for j in range(0, 12)]
-    circuit_indices = [[] for j in range(0, 12)]
-    stat_dists = [[] for j in range(0, 12)]
-    stdevs = [[] for j in range(0, 12)]
-    conf_ints = [[] for j in range(0, 12)]
-    for j, circuit_filename in enumerate(list_file):
-        total = 0
-        stat_dist_avg = 0
-        values = []
-        with open(folder_data+circuit_filename, 'r') as circuit_file:
-            expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
-            if reg_ex.match(circuit_filename):
-                index = k
-                break
-        for expe_data_string in expe_list:
-            try:
-                expe_data = ast.literal_eval(expe_data_string)
-                total += 1
-                stat_dist_avg += expe_data['stat_dist']
-                values.append(expe_data['stat_dist'])
-                n_kept += 1
-            except SyntaxError:
-                n_skipped += 1
-        stat_dists[index].append(stat_dist_avg/total)
-        qasm_counts[index].append(expe_data['qasm_count'])
-        for l,cn in enumerate(CIRCUIT_NAMES):
-            if cn in circuit_filename:
-                circuit_index = l+1
-        circuit_indices[index].append(circuit_index)
-        stdevs[index].append(statistics.stdev(values))
-        ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
-        conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
-    indices_to_plot = [pl for pl in range(6,12)]
-    for j in indices_to_plot:
-        for k in range(0,len(stat_dists[j])):
-            bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
-            stat_dists[j][k] -= bare_ref
-    print(n_skipped, n_kept)
 
-def save_relevant_ploting_data(folder, filename):
+def save_everything_calib_data_avg(folder, save_data_folder_pref):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
-    with open(filename, 'w') as file_raw:
-        with open('averaged_'+filename, 'w') as file_avg:
-            for j, circuit_filename in enumerate(list_file):
-                with open(folder+circuit_filename, 'r') as circuit_file:
-                    expe_list = circuit_file.readlines()
-                for k, reg_ex in enumerate(re_labels):
-                    if reg_ex.match(circuit_filename):
-                        index = k
-                        break
-                for expe_data_string in expe_list:
-                    try:
-                        expe_data = ast.literal_eval(expe_data_string)
-                        stat_dists[index].append(expe_data['stat_dist'])
-                        parameter[index].append(convert_parameter(expe_data['calibration']['multiQubitGates'][qubit_index][parameter_name]))
-                        parameter[index].append(convert_parameter(expe_data['calibration']['qubits'][qubit_index][parameter_name]))
-                        n_kept += 1
-                    except SyntaxError:
-                        n_skipped += 1
+    single_q_param_names = ['name', 'T1', 'T2', 'gateError', 'readoutError']
+    #single_q_parameters = [dict.fromkeys(single_q_param_names) for j in range(0, 5)]
+    single_q_parameters = [{} for j in range(0, 5)]
+    multi_q_param_names = ['qubits', 'gateError']
+    #multi_q_parameters = [dict.fromkeys(multi_q_param_names) for j in range(0, 6)]
+    multi_q_parameters = [{} for j in range(0, 6)]
+    fridge_T = []
+    for j, circuit_filename in enumerate(list_file):
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for expe_data_string in expe_list:
+            try:
+                expe_data = ast.literal_eval(expe_data_string)
+                for i,param in enumerate(expe_data['calibration']['multiQubitGates']):
+                    multi_q_parameters[i]['qubits'] = param['qubits']
+                    for name in multi_q_param_names[1:]:
+                        multi_q_parameters[i].setdefault(name, []).append(convert_parameter(param[name]))
+                for i,param in enumerate(expe_data['calibration']['qubits']):
+                    single_q_parameters[i]['name'] = param['name']
+                    for name in single_q_param_names[1:]:
+                        single_q_parameters[i].setdefault(name, []).append(convert_parameter(param[name]))
+                fridge_T.append(expe_data['calibration']['fridgeParameters']['Temperature']['value'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+    with open(save_data_folder_pref + 'multi_q.dat', 'w') as data_file:
+        data_file.write('qubits gateError sigma(gateError)\n')
+        for line in multi_q_parameters:
+            data_file.write('{} {} {}\n'.format('-'.join([str(k) for k in line['qubits']]), statistics.mean(line['gateError']), statistics.stdev(line['gateError'])))
+    with open(save_data_folder_pref + 'single_q.dat', 'w') as data_file:
+        data_file.write('name T1 sigma(T1) T2 sigma(T2) gateError sigma(gateError) readoutError sigma(readoutError)\n')
+        for line in single_q_parameters:
+            data_file.write('{0} {1} {5} {2} {6} {3} {7} {4} {8}\n'.format(line['name'], *[statistics.mean(line[name]) for name in single_q_param_names[1:]], *[statistics.stdev(line[name]) for name in single_q_param_names[1:]])) 
+    with open(save_data_folder_pref + 'temp.dat', 'w') as data_file:
+        data_file.write('T sigma(T)\n')
+        data_file.write('{} {}\n'.format(statistics.mean(fridge_T), statistics.stdev(fridge_T)))
     print(n_skipped, n_kept)
-    for k in range(0,12):
-        print(labels[k],statistics.mean(stat_dists[k]))
     
 
 # Plotting one bare run next to one encoded run with the expected output distribution
