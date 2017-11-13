@@ -407,3 +407,106 @@ def plot_one_expe(analysed_data1,analysed_data2,confidence):
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
     
     plt.show()
+
+def plot_everything_averaged_diff_verif_ftv2(folder, logscaley=True, bareindex=1, ci=.99, plot_qasm_count=False, save_data_folder_pref=None):
+    list_file = os.listdir(folder)
+    n_skipped = 0
+    n_kept = 0
+    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 0\\].txt'),
+                 re.compile('[\\S]*\\[2, 1\\].txt'),
+                 re.compile('[\\S]*\\[2, 4\\].txt'),
+                 re.compile('[\\S]*\\[3, 2\\].txt'),
+                 re.compile('[\\S]*\\[3, 4\\].txt'),
+                 re.compile('[\\S]*>ftv1.txt'),
+                 re.compile('[\\S]*>ftv2.txt'),
+                 re.compile('[\\S]*nftv1.txt'),
+                 re.compile('[\\S]*nftv2.txt'),
+                 re.compile('e[\\S]*\\|0\\+>.txt'),
+                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
+    labels = ['bare[1, 0]',
+              'bare[2, 0]',
+              'bare[2, 1]',
+              'bare[2, 4]',
+              'bare[3, 2]',
+              'bare[3, 4]',
+              'encoded|00>ftv1',
+              'encoded|00>ftv2',
+              'encoded|00>nftv1',
+              'encoded|00>nftv2',
+              'encoded|0+>',
+              'encoded|00>+|11>']
+    cmap = plt.cm.get_cmap('Paired')
+    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
+    qasm_counts = [[] for j in range(0, 12)]
+    circuit_indices = [[] for j in range(0, 12)]
+    stat_dists = [[] for j in range(0, 12)]
+    #stdevs = [[] for j in range(0, 12)]
+    #conf_ints = [[] for j in range(0, 12)]
+    fig, ax = plt.subplots(figsize=(20, 20))
+    for j, circuit_filename in enumerate(list_file):
+        total = 0
+        stat_dist_avg = 0
+        values = []
+        with open(folder+circuit_filename, 'r') as circuit_file:
+            expe_list = circuit_file.readlines()
+        for k, reg_ex in enumerate(re_labels):
+            if reg_ex.match(circuit_filename):
+                index = k
+                break
+        for expe_data_string in expe_list:
+            try:
+                expe_data = ast.literal_eval(expe_data_string)
+                total += 1
+                stat_dist_avg += expe_data['stat_dist']
+                values.append(expe_data['stat_dist'])
+                n_kept += 1
+            except SyntaxError:
+                n_skipped += 1
+        #if stat_dist_avg/total > .2:
+            #print(circuit_filename, stat_dist_avg/total)
+        stat_dists[index].append(stat_dist_avg/total)
+        qasm_counts[index].append(expe_data['qasm_count'])
+        for l,cn in enumerate(CIRCUIT_NAMES):
+            if cn in circuit_filename:
+                circuit_index = l+1
+        circuit_indices[index].append(circuit_index)
+        #stdevs[index].append(statistics.stdev(values))
+        #ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
+        #conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
+    if plot_qasm_count:
+        ax2 = ax.twinx()
+    ax.plot([j for j in range(-1,22)], [0 for j in range(-1,22)], '-r')
+    indices_to_plot = [pl for pl in range(6,12)]
+    for j in indices_to_plot:
+        if plot_qasm_count:
+            l1, l2 = zip(*sorted(zip(circuit_indices[j], qasm_counts[j])))
+            ax2.plot(l1, l2, label=labels[j], c=colors[j]) 
+        for k in range(0,len(stat_dists[j])):
+            bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
+            stat_dists[j][k] -= bare_ref
+        ax.scatter(np.array(circuit_indices[j]), np.array(stat_dists[j]), label=labels[j], c=colors[j])
+        if save_data_folder_pref:
+            with open(save_data_folder_pref + labels[j] + '-' + labels[bareindex] + '.dat', 'w') as data_file:
+                data_file.write('index stat_dist_diff conf_int99\n')
+                for tup in sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])):
+                    data_file.write('{} {} {}\n'.format(*tup))
+    handles, labs = ax.get_legend_handles_labels()
+    ax.set_title('Encoded circuits compared to bare qubit pair '+labels[bareindex][4:])
+    if plot_qasm_count:
+        ax2.legend(loc='upper left', bbox_to_anchor=(1, 0))
+    ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
+    if logscaley:
+        ax.set_yscale('log')
+    #ax.set_xticks(range(1,21))
+    #ax.set_xticklabels(CIRCUIT_NAMES)
+    #ax.tick_params(axis='x', labelrotation=90)
+    ax.grid(True)
+    ax.set_xlim([0,21])
+    plt.sca(ax)
+    plt.xticks(range(1,21), [c[1:] for c in CIRCUIT_NAMES], rotation=60, horizontalalignment='right')
+    fig.tight_layout()
+    plt.show()
+    print(n_skipped, n_kept)
+    for k in range(0,12):
+        print(labels[k],statistics.mean(stat_dists[k]))

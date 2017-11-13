@@ -175,12 +175,13 @@ def encoded_00_prep_nftv2(quantump, qri=0):
     qc_nftv2.cx(qrs[qri][2], qrs[qri][4])
     qc_nftv2.h(qrs[qri][4])
     qc_nftv2.extend(swap_circuit([2, 1], quantump))
+    qc_nftv2.h(qrs[qri][1])
     qc_nftv2.cx(qrs[qri][3], qrs[qri][2])
     qc_nftv2.cx(qrs[qri][2], qrs[qri][0])
-    qc_nftv2.h(qrs[qri][0])
+    #qc_nftv2.h(qrs[qri][0])
     qc_nftv2.cx(qrs[qri][1], qrs[qri][0])
-    qc_nftv2.h(qrs[qri][0])
-    qc_nftv2.h(qrs[qri][1])
+    #qc_nftv2.h(qrs[qri][0])
+    #qc_nftv2.h(qrs[qri][1])
     #qc_nftv2.measure(qrs[qri][0],crs[cri][0])
     return qc_nftv2
 
@@ -498,6 +499,26 @@ def fetch_previous(filename, api):
                     data_file.write(str(job_result))
     return new
 
+def fetch_previous_verif_nftv2(filename, api):
+    '''Function that fetch previously ran experiements whose ids are stored in data/filename
+    '''
+    new = 0
+    with open('data/'+filename, 'r') as ids_file_read:
+        id_lines = ids_file_read.readlines()
+    with open('data/'+filename, 'w') as ids_file_write:
+        for id_line in id_lines:
+            id_string = id_line.rstrip()
+            job_result = api.get_job(id_string)
+            if not job_result['status'] == 'COMPLETED':
+                ids_file_write.write(id_line)
+            else:
+                new += 1
+                with open('data/completed_'+filename, 'a') as comp_file:
+                    comp_file.write(id_line)
+                with open('data/API_dumps_verif_nftv2/api_dump_'+id_string+'.txt', 'w') as data_file:
+                    data_file.write(str(job_result))
+    return new
+
 
 # Functions to analyse gathered data
 ####################################
@@ -595,6 +616,34 @@ def process_all_api_dumps(file_of_files_to_process, file_of_already_processed_fi
             if not filename in processed:
                 n_processed += 1
                 process_api_dump('data/API_dumps/api_dump_' + filename.rstrip() + '.txt', dict_qasm_name)
+                file_processed.write(filename)
+    return n_processed
+
+
+def process_api_dump_verif_nftv2(filename, dict_qasm_name, dict_res={}):
+    with open(filename, 'r') as api_dump_file:
+        job_results = ast.literal_eval(api_dump_file.read())
+    for res in job_results['qasms']:
+        names = dict_qasm_name['OPENQASM 2.0;'+res['qasm']]
+        for name in names:
+            res_entry = api_data_to_dict(res, name)
+            res_entry['calibration'] = job_results['calibration']
+            dict_res.setdefault(name, []).append(res_entry)
+            with open('data/Processed_data_verif_nftv2/' + name + '.txt', 'a') as circuit_file:
+                circuit_file.write(str(res_entry) + '\n')
+    return dict_res
+
+def process_all_api_dumps_verif_nftv2(file_of_files_to_process, file_of_already_processed_files, dict_qasm_name):
+    n_processed = 0
+    with open(file_of_already_processed_files, 'r') as file_processed:
+        processed = file_processed.readlines()
+    with open(file_of_files_to_process, 'r') as file_to_process:
+        to_process = file_to_process.readlines()
+    with open(file_of_already_processed_files, 'a') as file_processed:
+        for filename in to_process:
+            if not filename in processed:
+                n_processed += 1
+                process_api_dump_verif_nftv2('data/API_dumps_verif_nftv2/api_dump_' + filename.rstrip() + '.txt', dict_qasm_name)
                 file_processed.write(filename)
     return n_processed
 
