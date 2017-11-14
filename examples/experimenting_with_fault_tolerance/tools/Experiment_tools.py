@@ -477,7 +477,26 @@ def post_treatment_list(results):
                 with open('data/timed_out.txt', 'a') as timed_out_file:
                     timed_out_file.write(res.get_job_id()+'\n')
 
-
+def post_treatment_list_verif_nftv2(results):
+    '''Callback function to write the results into a file after the jobs are finished.
+    '''
+    for res in results:
+        with open('data/callback.log', 'a') as logfile:
+            logfile.write(str(time.asctime(time.localtime(time.time())))+':'+res.get_status()+' - id: '+res.get_job_id()+'\n')
+        circuit_names = res.get_names()
+        try:
+            for circuit_name in circuit_names:
+                circuit_data = res.get_data(circuit_name)
+                filename = 'data/Raw_counts/' + circuit_name + '_' + circuit_data['date']+'.txt'
+                with open(filename, 'w') as data_file:
+                    data_file.write(str(circuit_data['counts']))
+            with open('data/completed_verif_nftv2.txt', 'a') as completed_file:
+                completed_file.write(res.get_job_id()+'\n')
+        except QISKitError as qiskit_err:
+            if str(qiskit_err) == '\'Time Out\'':
+                with open('data/timed_out_verif_nftv2.txt', 'a') as timed_out_file:
+                    timed_out_file.write(res.get_job_id()+'\n')
+                    
 # Function to fetch previously timed out results
 def fetch_previous(filename, api):
     '''Function that fetch previously ran experiements whose ids are stored in data/filename
