@@ -4,6 +4,7 @@ import os
 import matplotlib.pyplot as plt
 import re
 import statistics
+import random
 import numpy as np
 from numpy import array
 from scipy.stats import t, norm
@@ -56,34 +57,23 @@ PLOT_LABELS = ['bare[1, 0]',
                'encoded|0+>',
                'encoded|00>+|11>']
 
+RE_LABELS = [re.compile('[\\S]*\\[1, 0\\].txt'),
+             re.compile('[\\S]*\\[2, 0\\].txt'),
+             re.compile('[\\S]*\\[2, 1\\].txt'),
+             re.compile('[\\S]*\\[2, 4\\].txt'),
+             re.compile('[\\S]*\\[3, 2\\].txt'),
+             re.compile('[\\S]*\\[3, 4\\].txt'),
+             re.compile('[\\S]*>ftv1.txt'),
+             re.compile('[\\S]*>ftv2.txt'),
+             re.compile('[\\S]*nftv1.txt'),
+             re.compile('[\\S]*nftv2.txt'),
+             re.compile('e[\\S]*\\|0\\+>.txt'),
+             re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
+
 def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.99, save_data_folder_pref=None):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
     cmap = plt.cm.get_cmap('Paired')
     colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
@@ -98,7 +88,7 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
         values = []
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(RE_LABELS):
             if reg_ex.match(circuit_filename):
                 index = k
                 break
@@ -123,12 +113,12 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
         ct = t.interval(ci, len(values)-1, loc=0, scale=1)[1]
         conf_ints[index].append(ct*statistics.stdev(values)/np.sqrt(len(values)))
     #plots = [plt.scatter(qasm_counts[j], stat_dists[j], marker='x', label=labels[j], c=colors[j]) for j in range(0, 12)]
-    indices_to_plot = [labels.index(pl) for pl in sublabels]
+    indices_to_plot = [PLOT_LABELS.index(pl) for pl in sublabels]
     for j in indices_to_plot:
         l1, l2, l3 = zip(*sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])))
-        ax.errorbar(l1, l2, yerr=l3, markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        ax.errorbar(l1, l2, yerr=l3, markersize=15, mew=3, fmt='x', label=PLOT_LABELS[j], c=colors[j])
         if save_data_folder_pref:
-            with open(save_data_folder_pref + labels[j] + '.dat', 'w') as data_file:
+            with open(save_data_folder_pref + PLOT_LABELS[j] + '.dat', 'w') as data_file:
                 data_file.write('index stat_dist conf_int99\n')
                 for tup in zip(l1, l2, l3):
                     data_file.write('{} {} {}\n'.format(*tup))
@@ -156,36 +146,12 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     plt.show()
     print(n_skipped, n_kept)
     for k in range(0,12):
-        print(labels[k],statistics.mean(stat_dists[k]))
+        print(PLOT_LABELS[k],statistics.mean(stat_dists[k]))
 
 def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, plot_qasm_count=False, save_data_folder_pref=None):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
     cmap = plt.cm.get_cmap('Paired')
     colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
@@ -200,7 +166,7 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, p
         values = []
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(RE_LABELS):
             if reg_ex.match(circuit_filename):
                 index = k
                 break
@@ -231,18 +197,18 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, p
     for j in indices_to_plot:
         if plot_qasm_count:
             l1, l2 = zip(*sorted(zip(circuit_indices[j], qasm_counts[j])))
-            ax2.plot(l1, l2, label=labels[j], c=colors[j]) 
+            ax2.plot(l1, l2, label=PLOT_LABELS[j], c=colors[j]) 
         for k in range(0,len(stat_dists[j])):
             bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
             stat_dists[j][k] -= bare_ref
-        ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=labels[j], c=colors[j])
+        ax.errorbar(np.array(circuit_indices[j]), np.array(stat_dists[j]), yerr=np.array(conf_ints[j]), markersize=15, mew=3, fmt='x', label=PLOT_LABELS[j], c=colors[j])
         if save_data_folder_pref:
-            with open(save_data_folder_pref + labels[j] + '-' + labels[bareindex] + '.dat', 'w') as data_file:
+            with open(save_data_folder_pref + PLOT_LABELS[j] + '-' + PLOT_LABELS[bareindex] + '.dat', 'w') as data_file:
                 data_file.write('index stat_dist_diff conf_int99\n')
                 for tup in sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])):
                     data_file.write('{} {} {}\n'.format(*tup))
     handles, labs = ax.get_legend_handles_labels()
-    ax.set_title('Encoded circuits compared to bare qubit pair '+labels[bareindex][4:])
+    ax.set_title('Encoded circuits compared to bare qubit pair '+PLOT_LABELS[bareindex][4:])
     if plot_qasm_count:
         ax2.legend(loc='upper left', bbox_to_anchor=(1, 0))
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
@@ -259,36 +225,12 @@ def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, p
     plt.show()
     print(n_skipped, n_kept)
     for k in range(0,12):
-        print(labels[k],statistics.mean(stat_dists[k]))
+        print(PLOT_LABELS[k],statistics.mean(stat_dists[k]))
 
 def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_param=False, logscalex=True, logscaley=True, sublabels=PLOT_LABELS, ci=.99, x_range=[10**(-5),10**(-1)], y_range=[10**(-2), 1]):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
     #cmap = plt.cm.get_cmap('Paired')
     #colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     stat_dists = [[] for j in range(0, 12)]
@@ -297,7 +239,7 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
     for j, circuit_filename in enumerate(list_file):
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(RE_LABELS):
             if reg_ex.match(circuit_filename):
                 index = k
                 break
@@ -312,7 +254,7 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
                 n_kept += 1
             except SyntaxError:
                 n_skipped += 1
-    indices_to_plot = [labels.index(pl) for pl in sublabels]
+    indices_to_plot = [PLOT_LABELS.index(pl) for pl in sublabels]
     for j in indices_to_plot:
         x = np.array(parameter[j])
         y = np.array(stat_dists[j])
@@ -324,8 +266,8 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
         # Sort the points by density, so that the densest points are plotted last
         idx = z.argsort()
         x, y, z = x[idx], y[idx], z[idx]
-        ax.scatter(x, y, c=z, s=50, label=labels[j], edgecolor='')
-        #ax.scatter(np.array(parameter[j]), np.array(stat_dists[j]), marker='x', label=labels[j], c=colors[j])
+        ax.scatter(x, y, c=z, s=50, label=PLOT_LABELS[j], edgecolor='')
+        #ax.scatter(np.array(parameter[j]), np.array(stat_dists[j]), marker='x', label=PLOT_LABELS[j], c=colors[j])
     handles, labs = ax.get_legend_handles_labels()
     ax.set_title('all experiments vs {} for {} '.format(parameter_name, qubit_index))
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
@@ -340,7 +282,7 @@ def plot_everything_calib_data(folder, qubit_index, parameter_name, multi_qubit_
     plt.show()
     print(n_skipped, n_kept)
     for k in range(0,12):
-        print(labels[k],statistics.mean(stat_dists[k]))
+        print(PLOT_LABELS[k],statistics.mean(stat_dists[k]))
 
 
 def save_everything_calib_data_avg(folder, save_data_folder_pref):
@@ -387,55 +329,49 @@ def save_everything_calib_data_avg(folder, save_data_folder_pref):
     
 
 # Plotting one bare run next to one encoded run with the expected output distribution
-def plot_one_expe(analysed_data1,analysed_data2,confidence):
+def plot_one_random_expe(data_folder, circuit_name, deselect_labels=range(0,12), ci=.99):
+    list_file = [filename for filename in os.listdir(data_folder) if circuit_name in filename]
+    n_type = len(list_file)
+    cmap = plt.cm.get_cmap('Paired')
+    colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     N = 4;
     ind = np.arange(N)
-    
-    width = 0.25
-    
+    width = 1/(n_type+1)
+
     fig, ax = plt.subplots()
-    hist1 = ax.bar(ind, analysed_data1['values']/analysed_data1['total_valid'], width, color='r', yerr=analysed_data1['stand_dev']*norm.ppf(1/2+confidence/2),label=analysed_data1['version']+' (stat dist : '+str(analysed_data1['stat_dist'])+')')
-    hist2 = ax.bar(ind+width, analysed_data2['values']/analysed_data2['total_valid'], width, color='b', yerr=analysed_data2['stand_dev']*norm.ppf(1/2+confidence/2),label=analysed_data2['version']+' (stat dist : '+str(analysed_data2['stat_dist'])+')')
-    hist3 = ax.bar(ind+2*width, analysed_data1['output_distribution'], width, color='g',label='Expectation')
-    
+    hist = []
+
+    for j, circuit_filename in enumerate(list_file):
+        with open(data_folder+circuit_filename, 'r') as circuit_file:
+            expe_string = random.choice(circuit_file.readlines())
+        for k, reg_ex in enumerate(RE_LABELS):
+            if reg_ex.match(circuit_filename):
+                index = k
+                break
+        if index in deselect_labels:
+            continue
+        else:
+            expe_data = ast.literal_eval(expe_string)
+            hist.append(ax.bar(ind+j*width,
+                               np.array(expe_data['experimental_distribution_array']),
+                               width,
+                               color=colors[index],
+                               yerr=np.array(expe_data['stand_dev'])*norm.ppf(1/2+ci/2),
+                               label=PLOT_LABELS[index]+'(stat dist: {} - r: {})'.format(expe_data['stat_dist'], expe_data['post_selection_ratio'])))
+
     ax.set_ylabel('Frequencies')
-    ax.set_title('Performance on the circuit : '+analysed_data1['circuit_desc']
-                 +' (ratio of post-selection : '+str(analysed_data2['post_selected_ratio'])+')')
-    ax.set_xticks(ind + width)
-    ax.set_xticklabels(analysed_data1['labels'])
-    
+    ax.set_title('Performance on the circuit : ' + circuit_name)
+    ax.set_xticks(ind + (n_type-1)*width/2)
+    ax.set_xticklabels(['00', '01', '10', '11'])
+
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
-    
+
     plt.show()
 
 def plot_everything_averaged_diff_verif_ftv2(folder, logscaley=True, bareindex=1, ci=.99, plot_qasm_count=False, save_data_folder_pref=None):
     list_file = os.listdir(folder)
     n_skipped = 0
     n_kept = 0
-    re_labels = [re.compile('[\\S]*\\[1, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 0\\].txt'),
-                 re.compile('[\\S]*\\[2, 1\\].txt'),
-                 re.compile('[\\S]*\\[2, 4\\].txt'),
-                 re.compile('[\\S]*\\[3, 2\\].txt'),
-                 re.compile('[\\S]*\\[3, 4\\].txt'),
-                 re.compile('[\\S]*>ftv1.txt'),
-                 re.compile('[\\S]*>ftv2.txt'),
-                 re.compile('[\\S]*nftv1.txt'),
-                 re.compile('[\\S]*nftv2.txt'),
-                 re.compile('e[\\S]*\\|0\\+>.txt'),
-                 re.compile('e[\\S]*\\|00>\\+\\|11>.txt')]
-    labels = ['bare[1, 0]',
-              'bare[2, 0]',
-              'bare[2, 1]',
-              'bare[2, 4]',
-              'bare[3, 2]',
-              'bare[3, 4]',
-              'encoded|00>ftv1',
-              'encoded|00>ftv2',
-              'encoded|00>nftv1',
-              'encoded|00>nftv2',
-              'encoded|0+>',
-              'encoded|00>+|11>']
     cmap = plt.cm.get_cmap('Paired')
     colors = [cmap(j/12) for j in [1,5,10,11,4,0,8,9,6,7,2,3]]
     qasm_counts = [[] for j in range(0, 12)]
@@ -450,7 +386,7 @@ def plot_everything_averaged_diff_verif_ftv2(folder, logscaley=True, bareindex=1
         values = []
         with open(folder+circuit_filename, 'r') as circuit_file:
             expe_list = circuit_file.readlines()
-        for k, reg_ex in enumerate(re_labels):
+        for k, reg_ex in enumerate(RE_LABELS):
             if reg_ex.match(circuit_filename):
                 index = k
                 break
@@ -481,18 +417,18 @@ def plot_everything_averaged_diff_verif_ftv2(folder, logscaley=True, bareindex=1
     for j in indices_to_plot:
         if plot_qasm_count:
             l1, l2 = zip(*sorted(zip(circuit_indices[j], qasm_counts[j])))
-            ax2.plot(l1, l2, label=labels[j], c=colors[j]) 
+            ax2.plot(l1, l2, label=PLOT_LABELS[j], c=colors[j]) 
         for k in range(0,len(stat_dists[j])):
             bare_ref = stat_dists[bareindex][circuit_indices[bareindex].index(circuit_indices[j][k])]
             stat_dists[j][k] -= bare_ref
-        ax.scatter(np.array(circuit_indices[j]), np.array(stat_dists[j]), label=labels[j], c=colors[j])
+        ax.scatter(np.array(circuit_indices[j]), np.array(stat_dists[j]), label=PLOT_LABELS[j], c=colors[j])
         if save_data_folder_pref:
-            with open(save_data_folder_pref + labels[j] + '-' + labels[bareindex] + '.dat', 'w') as data_file:
+            with open(save_data_folder_pref + PLOT_LABELS[j] + '-' + PLOT_LABELS[bareindex] + '.dat', 'w') as data_file:
                 data_file.write('index stat_dist_diff conf_int99\n')
                 for tup in sorted(zip(circuit_indices[j], stat_dists[j], conf_ints[j])):
                     data_file.write('{} {} {}\n'.format(*tup))
     handles, labs = ax.get_legend_handles_labels()
-    ax.set_title('Encoded circuits compared to bare qubit pair '+labels[bareindex][4:])
+    ax.set_title('Encoded circuits compared to bare qubit pair '+PLOT_LABELS[bareindex][4:])
     if plot_qasm_count:
         ax2.legend(loc='upper left', bbox_to_anchor=(1, 0))
     ax.legend(loc='lower left', bbox_to_anchor=(1, 0))
@@ -509,4 +445,4 @@ def plot_everything_averaged_diff_verif_ftv2(folder, logscaley=True, bareindex=1
     plt.show()
     print(n_skipped, n_kept)
     for k in range(0,12):
-        print(labels[k],statistics.mean(stat_dists[k]))
+        print(PLOT_LABELS[k],statistics.mean(stat_dists[k]))
