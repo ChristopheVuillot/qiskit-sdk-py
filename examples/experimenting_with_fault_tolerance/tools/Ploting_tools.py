@@ -79,6 +79,7 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     qasm_counts = [[] for j in range(0, 12)]
     circuit_indices = [[] for j in range(0, 12)]
     stat_dists = [[] for j in range(0, 12)]
+    post_select_r = [[] for j in range(0, 12)]
     stdevs = [[] for j in range(0, 12)]
     conf_ints = [[] for j in range(0, 12)]
     fig, ax = plt.subplots(figsize=(20, 20))
@@ -97,6 +98,7 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
                 expe_data = ast.literal_eval(expe_data_string)
                 total += 1
                 stat_dist_avg += expe_data['stat_dist']
+                post_select_r[index].append(expe_data['post_selection_ratio'])
                 values.append(expe_data['stat_dist'])
                 n_kept += 1
             except SyntaxError:
@@ -145,8 +147,12 @@ def plot_everything_averaged(folder, logscaley=True, sublabels=PLOT_LABELS, ci=.
     plt.xticks(range(1,21), [c[1:] for c in CIRCUIT_NAMES], rotation=60, horizontalalignment='right')
     plt.show()
     print(n_skipped, n_kept)
+    print('\nAverage performance:\n')
     for k in range(0,12):
         print(PLOT_LABELS[k],statistics.mean(stat_dists[k]))
+    print('\nPost selection ratios:\n')
+    for k in range(6,10):
+        print(PLOT_LABELS[k], statistics.mean(post_select_r[k]+post_select_r[10]+post_select_r[11]))
 
 def plot_everything_averaged_diff(folder, logscaley=True, bareindex=1, ci=.99, plot_qasm_count=False, save_data_folder_pref=None):
     list_file = os.listdir(folder)
